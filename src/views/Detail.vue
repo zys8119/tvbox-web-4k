@@ -70,9 +70,9 @@ function playTo(from: string, url: string) {
           </h1>
           <div class="flex flex-wrap gap-2 text-xs mb-4">
             <span v-if="detail.vod_year" class="px-2.5 py-1 rounded-md bg-white/[0.09] text-gray-300">{{ detail.vod_year
-              }}</span>
+            }}</span>
             <span v-if="detail.vod_area" class="px-2.5 py-1 rounded-md bg-white/[0.09] text-gray-300">{{ detail.vod_area
-              }}</span>
+            }}</span>
             <span v-if="detail.vod_remarks" class="px-2.5 py-1 rounded-md bg-indigo-500/20 text-indigo-300">
               {{ detail.vod_remarks }}
             </span>
@@ -110,7 +110,7 @@ function playTo(from: string, url: string) {
           播放线路
         </h2>
         <div class="flex flex-wrap gap-2">
-          <button v-for="(l, i) in lines" :key="l.from" class="chip border-none"
+          <button v-for="(l, i) in lines" :key="l.from" class="b-none chip"
             :class="i === lineIndex ? 'chip-active' : 'chip-idle'" @click="lineIndex = i; expanded = false">
             {{ l.from }}
             <span class="text-xs opacity-60 ml-1">{{ l.episodes.length }}</span>
@@ -128,7 +128,7 @@ function playTo(from: string, url: string) {
               共 {{ episodes.length }} 集
             </span>
           </h2>
-          <button class="btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
+          <button class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
             :title="desc ? '当前倒序，点击切换为正序' : '当前正序，点击切换为倒序'" @click="desc = !desc">
             <span class="i-carbon-switch-layer-2" :class="desc ? 'rotate-180' : ''" />
             {{ desc ? "倒序" : "正序" }}
@@ -141,7 +141,7 @@ function playTo(from: string, url: string) {
             {{ ep.name }}
           </RouterLink>
         </div>
-        <button v-if="episodes.length > 30" class="btn text-sm mt-3 w-full bg-white/[0.05] hover:bg-white/[0.11]"
+        <button v-if="episodes.length > 30" class="b-none btn text-sm mt-3 w-full bg-white/[0.05] hover:bg-white/[0.11]"
           @click="expanded = !expanded">
           {{ expanded ? "收起" : `展开全部 ${episodes.length} 集` }}
         </button>

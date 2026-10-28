@@ -29,7 +29,7 @@ function go(p: number) {
 <template>
   <div class="flex items-center justify-center gap-1.5 py-8 flex-wrap">
     <button
-      class="btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11]"
+      class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11]"
       @click="go(page - 1)"
     >
       上一页
@@ -37,7 +37,7 @@ function go(p: number) {
     <template v-for="it in pages" :key="it.page">
       <span v-if="it.ellipsis" class="text-gray-600 px-1">…</span>
       <button
-        class="btn text-sm min-w-9 px-2"
+        class="b-none btn text-sm min-w-9 px-2"
         :class="
           it.page === page
             ? 'text-white bg-gradient-to-br from-indigo-500 to-violet-500 shadow-[0_8px_22px_-10px_rgba(99,102,241,1)]'
@@ -49,7 +49,7 @@ function go(p: number) {
       </button>
     </template>
     <button
-      class="btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11]"
+      class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11]"
       @click="go(page + 1)"
     >
       下一页

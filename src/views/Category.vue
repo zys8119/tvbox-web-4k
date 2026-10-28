@@ -91,8 +91,8 @@ watch(
     <div class="page-wrap py-5">
         <!-- 分类 Tab -->
         <div class="flex items-center gap-2 overflow-x-auto pb-3 mb-3">
-            <RouterLink v-for="c in classes" :key="c.type_id" :to="`/category/${c.type_id}`"
-                class="chip" :class="c.type_id === tid ? 'chip-active' : 'chip-idle'">
+            <RouterLink v-for="c in classes" :key="c.type_id" :to="`/category/${c.type_id}`" class="chip"
+                :class="c.type_id === tid ? 'chip-active' : 'chip-idle'">
                 {{ c.type_name }}
             </RouterLink>
         </div>
@@ -102,14 +102,12 @@ watch(
             <div v-for="g in groups" :key="g.key" class="flex items-start gap-3 text-sm">
                 <span class="shrink-0 w-14 pt-1 text-[13px] text-gray-500">{{ g.name }}</span>
                 <div class="flex flex-wrap gap-1.5">
-                    <button class="chip !py-1 !px-2.5"
-                        :class="!selected[g.key] ? 'chip-active' : 'chip-idle'"
+                    <button class="b-none chip !py-1 !px-2.5" :class="!selected[g.key] ? 'chip-active' : 'chip-idle'"
                         @click="pick(g.key, '')">
                         全部
                     </button>
-                    <button v-for="v in g.value" :key="v.v" class="chip !py-1 !px-2.5"
-                        :class="selected[g.key] === v.v ? 'chip-active' : 'chip-idle'"
-                        @click="pick(g.key, v.v)">
+                    <button v-for="v in g.value" :key="v.v" class="b-none chip !py-1 !px-2.5"
+                        :class="selected[g.key] === v.v ? 'chip-active' : 'chip-idle'" @click="pick(g.key, v.v)">
                         {{ v.n }}
                     </button>
                 </div>

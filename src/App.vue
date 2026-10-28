@@ -100,7 +100,7 @@ function doSearch() {
             </div>
           </div>
 
-          <button class="md:hidden btn bg-white/5 p-2" @click="menuOpen = !menuOpen">
+          <button class="md:hidden b-none btn bg-white/5 p-2" @click="menuOpen = !menuOpen">
             <span class="i-carbon-menu" />
           </button>
         </div>

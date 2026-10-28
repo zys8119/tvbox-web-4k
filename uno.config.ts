@@ -23,13 +23,12 @@ export default defineConfig({
   transformers: [transformerDirectives(), transformerVariantGroup()],
   shortcuts: {
     // —— 交互基础 ——
-    "btn":
-      "inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg cursor-pointer select-none transition-all duration-200 ease-out",
+    btn: "b-none inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg cursor-pointer select-none transition-all duration-200 ease-out",
     "btn-primary":
       "btn text-white bg-gradient-to-br from-indigo-500 to-violet-500 hover:from-indigo-400 hover:to-violet-400 shadow-[0_6px_18px_-8px_rgba(99,102,241,0.9)] hover:shadow-[0_10px_26px_-8px_rgba(99,102,241,0.95)] active:scale-[0.98]",
 
     // —— 玻璃拟态 ——
-    "glass":
+    glass:
       "bg-white/[0.055] backdrop-blur-xl shadow-[0_8px_32px_-12px_rgba(0,0,0,0.75)]",
     "glass-soft": "bg-white/[0.04] backdrop-blur-lg",
     "glass-hover":
@@ -38,18 +37,23 @@ export default defineConfig({
       "bg-white/[0.08] backdrop-blur-2xl shadow-[0_16px_48px_-16px_rgba(0,0,0,0.85)]",
 
     // —— 卡片 / 容器 ——
-    "card": "glass rounded-2xl overflow-hidden",
-    "panel": "glass rounded-2xl p-4",
-    "section-title": "flex items-center gap-2 text-lg font-semibold tracking-wide",
-    "title-bar": "w-1 h-4 rounded-full bg-gradient-to-b from-indigo-400 to-violet-500",
+    card: "glass rounded-2xl overflow-hidden",
+    panel: "glass rounded-2xl p-4",
+    "section-title":
+      "flex items-center gap-2 text-lg font-semibold tracking-wide",
+    "title-bar":
+      "w-1 h-4 rounded-full bg-gradient-to-b from-indigo-400 to-violet-500",
 
     // —— 标签 / 胶囊 ——
-    "chip":
-      "px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-all duration-200 cursor-pointer select-none",
+    chip: "b-none px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-all duration-200 cursor-pointer select-none",
     "chip-idle":
       "bg-white/[0.05] text-gray-300 hover:bg-white/[0.11] hover:text-white",
     "chip-active":
       "text-white bg-gradient-to-br from-indigo-500 to-violet-500 shadow-[0_8px_22px_-10px_rgba(99,102,241,1)]",
+
+    // —— 按钮去边框（统一入口，不覆盖已设计的投影） ——
+    "b-none":
+      "border-0 border-none outline-none ring-0 focus:outline-none focus:ring-0",
 
     "ellipsis-2": "line-clamp-2",
     "page-wrap": "max-w-[1400px] mx-auto px-4 md:px-6",

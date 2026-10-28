@@ -196,7 +196,7 @@ onBeforeUnmount(destroyHls);
         切换线路
       </h2>
       <div class="flex flex-wrap gap-2">
-        <button v-for="(l, i) in lines" :key="l.from" class="chip border-none"
+        <button v-for="(l, i) in lines" :key="l.from" class="b-none chip"
           :class="i === lineIndex ? 'chip-active' : 'chip-idle'"
           @click="l.episodes.length && goEp(l.episodes[0].url, l.from)">
           {{ l.from }}
@@ -214,7 +214,7 @@ onBeforeUnmount(destroyHls);
             共 {{ episodes.length }} 集
           </span>
         </h2>
-        <button class="btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
+        <button class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
           :title="desc ? '当前倒序，点击切换为正序' : '当前正序，点击切换为倒序'" @click="desc = !desc">
           <span class="i-carbon-switch-layer-2" :class="desc ? 'rotate-180' : ''" />
           {{ desc ? "倒序" : "正序" }}
