@@ -419,24 +419,25 @@ onBeforeUnmount(() => {
             @click="seekTo(marks.outro)">
             跳片尾
           </button>
+
+          <!-- 上下集：靠右对齐 -->
+          <div v-if="episodes.length" class="ml-auto flex items-center gap-2">
+            <button
+              class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11] disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.05]"
+              :disabled="!prevEp" @click="prevEp && goEp(prevEp.url, flag)">
+              <span class="i-carbon-chevron-left text-[10px]" /> 上一集
+            </button>
+            <span class="text-[11px] text-gray-400 px-2 py-1 rounded-md bg-white/[0.05] tabular-nums">
+              {{ currentIndex >= 0 ? currentIndex + 1 : "?" }} / {{ episodes.length }}
+            </span>
+            <button
+              class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11] disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.05]"
+              :disabled="!nextEp" @click="nextEp && goEp(nextEp.url, flag)">
+              下一集 <span class="i-carbon-chevron-right text-[10px]" />
+            </button>
+          </div>
         </div>
 
-        <!-- 上下集 -->
-        <div v-if="episodes.length" class="flex items-center justify-center gap-3 mt-4">
-          <button
-            class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11] disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.05]"
-            :disabled="!prevEp" @click="prevEp && goEp(prevEp.url, flag)">
-            <span class="i-carbon-chevron-left" /> 上一集
-          </button>
-          <span class="text-xs text-gray-400 px-3 py-1 rounded-md bg-white/[0.05] tabular-nums">
-            {{ currentIndex >= 0 ? currentIndex + 1 : "?" }} / {{ episodes.length }}
-          </span>
-          <button
-            class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11] disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.05]"
-            :disabled="!nextEp" @click="nextEp && goEp(nextEp.url, flag)">
-            下一集 <span class="i-carbon-chevron-right" />
-          </button>
-        </div>
       </div>
 
       <!-- 右：线路 tab + 选集（同一卡片，垂直布局） -->
