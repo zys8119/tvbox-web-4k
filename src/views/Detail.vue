@@ -79,10 +79,10 @@ function playTo(from: string, url: string) {
             <div class="flex flex-wrap gap-2 text-xs mb-4">
               <span v-if="detail.vod_year" class="px-2.5 py-1 rounded-md bg-white/[0.09] text-gray-300">{{
                 detail.vod_year
-                }}</span>
+              }}</span>
               <span v-if="detail.vod_area" class="px-2.5 py-1 rounded-md bg-white/[0.09] text-gray-300">{{
                 detail.vod_area
-                }}</span>
+              }}</span>
               <span v-if="detail.vod_remarks" class="px-2.5 py-1 rounded-md bg-indigo-500/20 text-indigo-300">
                 {{ detail.vod_remarks }}
               </span>
@@ -166,7 +166,9 @@ function playTo(from: string, url: string) {
           <span class="title-bar" />
           剧情简介
         </h2>
-        <p class="text-sm leading-7 text-gray-300/90 whitespace-pre-wrap">
+        <!-- 富文本走白名单清洗后的 v-html，纯文本仍按原文换行渲染 -->
+        <div v-if="introIsHtml" class="rich-text text-sm leading-7 text-gray-300/90" v-html="safeIntro" />
+        <p v-else class="text-sm leading-7 text-gray-300/90 whitespace-pre-wrap">
           {{ detail.vod_content }}
         </p>
       </section>
