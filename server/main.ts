@@ -44,6 +44,21 @@ import {
   saveProgress,
   upsertHistory,
 } from "./db.ts";
+import {
+  activeSites,
+  getCachedSubscription,
+  getEnabledMap,
+  getSubscriptionUrl,
+  macCategory,
+  macDetail,
+  macHome,
+  macSearch,
+  normalizeSites,
+  refreshSubscription,
+  setSiteEnabled,
+  setSitesEnabled,
+  setSubscriptionUrl,
+} from "./tvbox.ts";
 
 /* ============================== 常量 ============================== */
 
@@ -1025,6 +1040,180 @@ const server = http.createServer(async (req, res) => {
           "POST /api/marks  保存片头片尾 {vod_id,intro,outro}；传 0 表示取消",
         ],
       });
+    }
+
+    /* ---------- TVBox 订阅接口 ---------- */
+
+    if (u.pathname === "/api/tvbox/config") {
+      if (req.method === "GET") {
+        const sub = getCachedSubscription();
+        return sendJson(res, 200, {
+          url: getSubscriptionUrl(),
+          cached: !!sub,
+          fetchedAt: sub?.fetchedAt ?? 0,
+          spider: sub?.spider ?? "",
+          counts: sub
+            ? {
+                sites: sub.sites.length,
+                lives: sub.lives.length,
+                parses: sub.parses.length,
+                flags: sub.flags.length,
+              }
+            : { sites: 0, lives: 0, parses: 0, flags: 0 },
+        });
+      }
+      if (req.method === "POST") {
+        const b = await readJsonBody(req);
+        const url = str(b.url).trim();
+        if (!url) return sendJson(res, 400, { code: 0, msg: "缺少订阅地址" });
+        try {
+          const sub = await setSubscriptionUrl(url);
+          return sendJson(res, 200, {
+            ok: true,
+            counts: {
+              sites: sub.sites.length,
+              lives: sub.lives.length,
+              parses: sub.parses.length,
+            },
+          });
+        } catch (e) {
+          return sendJson(res, 400, { code: 0, msg: (e as Error).message });
+        }
+      }
+      return sendJson(res, 405, { code: 0, msg: "method not allowed" });
+    }
+
+    if (u.pathname === "/api/tvbox/refresh") {
+      try {
+        const sub = await refreshSubscription();
+        return sendJson(res, 200, { ok: true, sites: sub.sites.length });
+      } catch (e) {
+        return sendJson(res, 400, { code: 0, msg: (e as Error).message });
+      }
+    }
+
+    if (u.pathname === "/api/tvbox/sites") {
+      const sub = getCachedSubscription();
+      if (!sub) return sendJson(res, 200, { list: [], cached: false });
+      const enabled = getEnabledMap();
+      const list = normalizeSites(sub).map((x) => ({
+        ...x,
+        enabled: enabled[x.key] === undefined ? true : !!enabled[x.key],
+      }));
+      return sendJson(res, 200, { list, cached: true });
+    }
+
+    if (u.pathname === "/api/tvbox/sites/enabled") {
+      const b = await readJsonBody(req);
+      const keys = Array.isArray(b.keys) ? (b.keys as unknown[]).map(str) : [];
+      const enabled = b.enabled !== false;
+      if (keys.length) setSitesEnabled(keys, enabled);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    if (u.pathname === "/api/tvbox/site/enabled") {
+      const b = await readJsonBody(req);
+      const key = str(b.key);
+      if (!key) return sendJson(res, 400, { code: 0, msg: "缺少 key" });
+      setSiteEnabled(key, b.enabled !== false);
+      return sendJson(res, 200, { ok: true });
+    }
+
+    if (u.pathname === "/api/tvbox/home") {
+      const sub = getCachedSubscription();
+      if (!sub)
+        return sendJson(res, 400, { code: 0, msg: "请先在设置中配置订阅" });
+      const key = q.get("site") ?? "";
+      const site = activeSites(sub).find((x) => x.key === key);
+      if (!site)
+        return sendJson(res, 404, { code: 0, msg: "站点不存在或未启用" });
+      try {
+        return sendJson(res, 200, await macHome(site.api));
+      } catch (e) {
+        return sendJson(res, 502, { code: 0, msg: (e as Error).message });
+      }
+    }
+
+    if (u.pathname === "/api/tvbox/category") {
+      const sub = getCachedSubscription();
+      if (!sub)
+        return sendJson(res, 400, { code: 0, msg: "请先在设置中配置订阅" });
+      const key = q.get("site") ?? "";
+      const site = activeSites(sub).find((x) => x.key === key);
+      if (!site)
+        return sendJson(res, 404, { code: 0, msg: "站点不存在或未启用" });
+      let ext: Record<string, string> | undefined;
+      const extRaw = q.get("ext");
+      if (extRaw) {
+        try {
+          ext = JSON.parse(extRaw) as Record<string, string>;
+        } catch {
+          ext = undefined;
+        }
+      }
+      try {
+        const data = await macCategory(
+          site.api,
+          q.get("tid") ?? "",
+          Number(q.get("page") ?? 1) || 1,
+          ext,
+        );
+        return sendJson(res, 200, data);
+      } catch (e) {
+        return sendJson(res, 502, { code: 0, msg: (e as Error).message });
+      }
+    }
+
+    if (u.pathname === "/api/tvbox/detail") {
+      const sub = getCachedSubscription();
+      if (!sub)
+        return sendJson(res, 400, { code: 0, msg: "请先在设置中配置订阅" });
+      const key = q.get("site") ?? "";
+      const site = activeSites(sub).find((x) => x.key === key);
+      if (!site)
+        return sendJson(res, 404, { code: 0, msg: "站点不存在或未启用" });
+      try {
+        const d = await macDetail(site.api, q.get("id") ?? "");
+        return sendJson(res, 200, { list: [d] });
+      } catch (e) {
+        return sendJson(res, 502, { code: 0, msg: (e as Error).message });
+      }
+    }
+
+    if (u.pathname === "/api/tvbox/search") {
+      const sub = getCachedSubscription();
+      if (!sub)
+        return sendJson(res, 400, { code: 0, msg: "请先在设置中配置订阅" });
+      const wd = q.get("wd") ?? "";
+      if (!wd) return sendJson(res, 200, { list: [] });
+      const only = q.get("site") ?? "";
+      const sites = activeSites(sub).filter(
+        (x) => x.searchable && (!only || x.key === only),
+      );
+      const results: Array<Record<string, unknown>> = [];
+      // 并发上限 8，避免一次性打爆所有采集站
+      const limit = 8;
+      for (let i = 0; i < sites.length; i += limit) {
+        const batch = sites.slice(i, i + limit);
+        const settled = await Promise.allSettled(
+          batch.map(async (s) => ({
+            site: s,
+            list: await macSearch(s.api, wd),
+          })),
+        );
+        for (const r of settled) {
+          if (r.status !== "fulfilled") continue;
+          const { site, list } = r.value;
+          for (const v of list) {
+            results.push({
+              ...v,
+              site_key: site.key,
+              site_name: site.name,
+            });
+          }
+        }
+      }
+      return sendJson(res, 200, { list: results });
     }
 
     /* ---------- 本地数据接口（不依赖远端初始化，放在 ensureInit 之前） ---------- */

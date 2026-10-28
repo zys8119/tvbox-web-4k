@@ -10,6 +10,10 @@ import Detail from "./views/Detail.vue";
 import Player from "./views/Player.vue";
 import History from "./views/History.vue";
 import Favorites from "./views/Favorites.vue";
+import Settings from "./views/Settings.vue";
+import Sites from "./views/Sites.vue";
+import SiteDetail from "./views/SiteDetail.vue";
+import SitePlayer from "./views/SitePlayer.vue";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -21,6 +25,10 @@ const router = createRouter({
     { path: "/play", name: "play", component: Player },
     { path: "/history", name: "history", component: History },
     { path: "/favorites", name: "favorites", component: Favorites },
+    { path: "/settings", name: "settings", component: Settings },
+    { path: "/sites", name: "sites", component: Sites },
+    { path: "/site/detail", name: "site-detail", component: SiteDetail },
+    { path: "/site/play", name: "site-play", component: SitePlayer },
     { path: "/:pathMatch(.*)*", redirect: "/" },
   ],
   scrollBehavior: () => ({ top: 0 }),

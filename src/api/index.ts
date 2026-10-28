@@ -243,6 +243,97 @@ export const saveMarksApi = (o: {
   outro?: number;
 }) => sendJson<Marks>("/api/marks", "POST", o);
 
+/* ============================== TVBox 订阅 ============================== */
+
+export interface TvboxConfigInfo {
+  url: string;
+  cached: boolean;
+  fetchedAt: number;
+  spider: string;
+  counts: { sites: number; lives: number; parses: number; flags: number };
+}
+
+export interface TvboxSite {
+  key: string;
+  name: string;
+  type: number;
+  api: string;
+  supported: boolean;
+  reason?: string;
+  searchable: boolean;
+  categories: string[];
+  enabled: boolean;
+}
+
+export interface AggregatedItem extends VodItem {
+  site_key: string;
+  site_name: string;
+}
+
+/** 读取订阅配置信息 */
+export const fetchTvboxConfig = () =>
+  getJson<TvboxConfigInfo>("/api/tvbox/config");
+
+/** 设置订阅地址并立即拉取 */
+export const setTvboxSubscription = (url: string) =>
+  sendJson<{
+    ok: boolean;
+    counts: { sites: number; lives: number; parses: number };
+  }>("/api/tvbox/config", "POST", { url });
+
+/** 重新拉取订阅 */
+export const refreshTvbox = () =>
+  sendJson<{ ok: boolean; sites: number }>("/api/tvbox/refresh", "POST");
+
+/** 站点列表（含启用状态） */
+export const fetchTvboxSites = () =>
+  getJson<{ list: TvboxSite[]; cached: boolean }>("/api/tvbox/sites");
+
+/** 批量启用/停用站点 */
+export const setTvboxSitesEnabled = (keys: string[], enabled: boolean) =>
+  sendJson<{ ok: boolean }>("/api/tvbox/sites/enabled", "POST", {
+    keys,
+    enabled,
+  });
+
+/** 单站点启用/停用 */
+export const setTvboxSiteEnabled = (key: string, enabled: boolean) =>
+  sendJson<{ ok: boolean }>("/api/tvbox/site/enabled", "POST", {
+    key,
+    enabled,
+  });
+
+/** 某站点首页（分类 + 推荐） */
+export const fetchTvboxHome = (site: string) =>
+  getJson<{ class: ClassItem[]; list: VodItem[] }>("/api/tvbox/home", {
+    site,
+  });
+
+/** 某站点分类列表 */
+export const fetchTvboxCategory = (
+  site: string,
+  tid: string,
+  page: number,
+  ext?: Record<string, string>,
+) =>
+  getJson<ListData>("/api/tvbox/category", {
+    site,
+    tid,
+    page: String(page),
+    ...(ext && Object.keys(ext).length ? { ext: JSON.stringify(ext) } : {}),
+  });
+
+/** 某站点详情 */
+export const fetchTvboxDetail = (site: string, id: string) =>
+  getJson<{ list: VodDetail[] }>("/api/tvbox/detail", { site, id });
+
+/** 跨站点聚合搜索 */
+export const fetchTvboxSearch = (wd: string, site?: string) =>
+  getJson<{ list: AggregatedItem[] }>("/api/tvbox/search", {
+    wd,
+    ...(site ? { site } : {}),
+  });
+
 /** 把后端返回的 header 字符串解析成对象 */
 export function parseHeader(raw?: string): Record<string, string> {
   if (!raw) return {};

@@ -58,6 +58,12 @@ db.exec(`
     outro     REAL NOT NULL DEFAULT 0,
     updated_at INTEGER NOT NULL DEFAULT 0
   );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL DEFAULT '',
+    updated_at INTEGER NOT NULL DEFAULT 0
+  );
 `);
 
 const now = () => Date.now();
@@ -298,6 +304,43 @@ export function saveMarks(
        updated_at = excluded.updated_at`,
   ).run(vodId, intro, outro, now());
   return { intro, outro };
+}
+
+/* ============================== 设置（订阅等） ============================== */
+
+/** 读取单个设置项 */
+export function getSetting(key: string, fallback = ""): string {
+  const row = db
+    .prepare("SELECT value FROM settings WHERE key = ?")
+    .get(key) as unknown as { value: string } | undefined;
+  return row?.value ?? fallback;
+}
+
+/** 写入单个设置项 */
+export function setSetting(key: string, value: string): void {
+  db.prepare(
+    `INSERT INTO settings (key, value, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET
+       value = excluded.value,
+       updated_at = excluded.updated_at`,
+  ).run(key, value, now());
+}
+
+/** 读取 JSON 形式的设置项 */
+export function getJsonSetting<T>(key: string, fallback: T): T {
+  const raw = getSetting(key, "");
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/** 写入 JSON 形式的设置项 */
+export function setJsonSetting(key: string, value: unknown): void {
+  setSetting(key, JSON.stringify(value));
 }
 
 export default db;
