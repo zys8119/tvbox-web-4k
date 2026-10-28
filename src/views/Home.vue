@@ -68,9 +68,10 @@ onBeforeUnmount(stopAuto);
       <!-- 背景层：所有推荐图叠放，仅当前项可见 -->
       <div class="absolute inset-0">
         <img v-for="(h, i) in heroes" :key="h.vod_id" :src="h.vod_pic"
-          class="absolute inset-0 w-full h-full object-cover transition-all duration-[1200ms] ease-out" :class="i === active
-              ? 'opacity-100 scale-105'
-              : 'opacity-0 scale-100'
+          class="absolute inset-0 w-full h-full object-cover blur-2xl brightness-[0.55] transition-all duration-[1200ms] ease-out"
+          :class="i === active
+            ? 'opacity-100 scale-125'
+            : 'opacity-0 scale-110'
             " :alt="h.vod_name" referrerpolicy="no-referrer" />
       </div>
 
@@ -80,48 +81,69 @@ onBeforeUnmount(stopAuto);
 
       <!-- 内容层 -->
       <div class="relative page-wrap h-full min-h-[380px] md:min-h-[560px] flex flex-col justify-end pb-10 md:pb-16">
-        <Transition name="hero-fade" mode="out-in">
-          <div v-if="current" :key="current.vod_id" class="max-w-2xl">
-            <p
-              class="inline-flex items-center gap-1.5 text-[11px] tracking-[0.2em] uppercase text-indigo-300 mb-3 px-2.5 py-1 rounded-full bg-indigo-500/20 backdrop-blur-md">
-              <span class="i-carbon-star-filled text-[10px]" />
-              今日推荐
-            </p>
-            <h1 class="text-2xl md:text-5xl font-bold mb-3 line-clamp-1 drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
-              {{ current.vod_name }}
-            </h1>
-            <p class="text-sm md:text-base text-gray-300/90 mb-6 line-clamp-2 max-w-xl">
-              {{ current.vod_remarks || "高清在线播放" }}
-            </p>
-            <div class="flex items-center gap-3">
-              <RouterLink :to="`/detail/${current.vod_id}`" class="btn-primary">
-                <span class="i-carbon-play-filled" />
-                立即观看
-              </RouterLink>
-              <RouterLink :to="`/detail/${current.vod_id}`"
-                class="b-none btn text-sm px-4 py-2 bg-white/[0.08] hover:bg-white/[0.16] text-gray-200">
-                查看详情
-              </RouterLink>
+        <div class="flex items-end gap-6 md:gap-10">
+          <!-- 左：文字信息 -->
+          <div class="flex-1 min-w-0">
+            <Transition name="hero-fade" mode="out-in">
+              <div v-if="current" :key="current.vod_id" class="max-w-2xl">
+                <p
+                  class="inline-flex items-center gap-1.5 text-[11px] tracking-[0.2em] uppercase text-indigo-300 mb-3 px-2.5 py-1 rounded-full bg-indigo-500/20 backdrop-blur-md">
+                  <span class="i-carbon-star-filled text-[10px]" />
+                  今日推荐
+                </p>
+                <h1 class="text-2xl md:text-5xl font-bold mb-3 line-clamp-1 drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
+                  {{ current.vod_name }}
+                </h1>
+                <p class="text-sm md:text-base text-gray-300/90 mb-6 line-clamp-2 max-w-xl">
+                  {{ current.vod_remarks || "高清在线播放" }}
+                </p>
+                <div class="flex items-center gap-3">
+                  <RouterLink :to="`/detail/${current.vod_id}`" class="btn-primary">
+                    <span class="i-carbon-play-filled" />
+                    立即观看
+                  </RouterLink>
+                  <RouterLink :to="`/detail/${current.vod_id}`"
+                    class="b-none btn text-sm px-4 py-2 bg-white/[0.08] hover:bg-white/[0.16] text-gray-200">
+                    查看详情
+                  </RouterLink>
+                </div>
+              </div>
+            </Transition>
+
+            <!-- 指示器：序号 + 进度点 -->
+            <div class="mt-8 flex items-center gap-4">
+              <div class="flex items-center gap-2">
+                <button v-for="(h, i) in heroes" :key="h.vod_id"
+                  class="b-none relative h-1 rounded-full overflow-hidden transition-all duration-500" :class="i === active
+                    ? 'w-10 bg-white/25'
+                    : 'w-4 bg-white/15 hover:bg-white/30'
+                    " :title="h.vod_name" @click="go(i)">
+                  <span v-if="i === active"
+                    class="absolute inset-0 bg-gradient-to-r from-indigo-400 to-violet-400 rounded-full" />
+                </button>
+              </div>
+              <span class="text-[11px] text-gray-400 tabular-nums">
+                {{ String(active + 1).padStart(2, "0") }} /
+                {{ String(heroes.length).padStart(2, "0") }}
+              </span>
             </div>
           </div>
-        </Transition>
 
-        <!-- 指示器：序号 + 进度点 -->
-        <div class="mt-8 flex items-center gap-4">
-          <div class="flex items-center gap-2">
-            <button v-for="(h, i) in heroes" :key="h.vod_id"
-              class="b-none relative h-1 rounded-full overflow-hidden transition-all duration-500" :class="i === active
-                  ? 'w-10 bg-white/25'
-                  : 'w-4 bg-white/15 hover:bg-white/30'
-                " :title="h.vod_name" @click="go(i)">
-              <span v-if="i === active"
-                class="absolute inset-0 bg-gradient-to-r from-indigo-400 to-violet-400 rounded-full" />
-            </button>
-          </div>
-          <span class="text-[11px] text-gray-400 tabular-nums">
-            {{ String(active + 1).padStart(2, "0") }} /
-            {{ String(heroes.length).padStart(2, "0") }}
-          </span>
+          <!-- 右：清晰海报，完整显示不裁切 -->
+          <Transition name="hero-fade" mode="out-in">
+            <div v-if="current" :key="current.vod_id"
+              class="hidden sm:block shrink-0 w-[170px] md:w-[230px] lg:w-[260px]">
+              <RouterLink :to="`/detail/${current.vod_id}`" class="group/poster block">
+                <div
+                  class="rounded-xl overflow-hidden shadow-[0_24px_60px_-24px_rgba(0,0,0,1)] ring-1 ring-white/10 transition-transform duration-500 ease-out hover:-translate-y-1">
+                  <!-- object-contain：完整显示，不裁切 -->
+                  <img :src="current.vod_pic" :alt="current.vod_name"
+                    class="w-full h-auto max-h-[300px] md:max-h-[360px] object-contain bg-black/40"
+                    referrerpolicy="no-referrer" />
+                </div>
+              </RouterLink>
+            </div>
+          </Transition>
         </div>
       </div>
 
