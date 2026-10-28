@@ -29,7 +29,7 @@ function go(p: number) {
 <template>
   <div class="flex items-center justify-center gap-1.5 py-8 flex-wrap">
     <button
-      class="btn text-sm px-3 bg-white/[0.045] ring-1 ring-white/[0.08] hover:bg-white/[0.09] hover:ring-white/20"
+      class="btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11]"
       @click="go(page - 1)"
     >
       上一页
@@ -40,8 +40,8 @@ function go(p: number) {
         class="btn text-sm min-w-9 px-2"
         :class="
           it.page === page
-            ? 'text-white bg-gradient-to-br from-indigo-500 to-violet-500 ring-1 ring-indigo-300/40 shadow-[0_6px_18px_-8px_rgba(99,102,241,0.95)]'
-            : 'bg-white/[0.045] ring-1 ring-white/[0.08] hover:bg-white/[0.09] hover:ring-white/20'
+            ? 'text-white bg-gradient-to-br from-indigo-500 to-violet-500 shadow-[0_8px_22px_-10px_rgba(99,102,241,1)]'
+            : 'bg-white/[0.05] hover:bg-white/[0.11]'
         "
         @click="go(it.page)"
       >
@@ -49,7 +49,7 @@ function go(p: number) {
       </button>
     </template>
     <button
-      class="btn text-sm px-3 bg-white/[0.045] ring-1 ring-white/[0.08] hover:bg-white/[0.09] hover:ring-white/20"
+      class="btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11]"
       @click="go(page + 1)"
     >
       下一页

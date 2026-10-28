@@ -138,44 +138,27 @@ onBeforeUnmount(destroyHls);
 <template>
   <div class="page-wrap py-4">
     <div class="mb-4 flex items-center gap-2 min-h-9">
-      <button
-        class="btn text-sm px-3 bg-white/[0.045] ring-1 ring-white/[0.08] hover:bg-white/[0.09] hover:ring-white/20"
-        @click="router.back()"
-      >
+      <button class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11]" @click="router.back()">
         <span class="i-carbon-arrow-left" /> 返回
       </button>
       <h1 class="text-base md:text-lg font-medium truncate">
         {{ title || "正在播放" }}
-        <span v-if="flag"
-          class="text-[11px] text-indigo-300 ml-2 px-2 py-0.5 rounded-md bg-indigo-500/15 ring-1 ring-indigo-400/30">
+        <span v-if="flag" class="text-[11px] text-indigo-300 ml-2 px-2 py-0.5 rounded-md bg-indigo-500/20">
           {{ flag }}
         </span>
       </h1>
     </div>
 
     <div
-      class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden ring-1 ring-white/12 shadow-[0_26px_70px_-30px_rgba(0,0,0,1)]">
-      <video
-        ref="video"
-        class="w-full h-full"
-        controls
-        playsinline
-        autoplay
-        @ended="onEnded"
-      />
-      <div
-        v-if="loading"
-        class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-sm text-gray-300"
-      >
-        <span
-          class="w-9 h-9 rounded-full border-2 border-white/15 border-t-indigo-400 animate-spin"
-        />
+      class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_26px_70px_-30px_rgba(0,0,0,1)]">
+      <video ref="video" class="w-full h-full" controls playsinline autoplay @ended="onEnded" />
+      <div v-if="loading"
+        class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-sm text-gray-300">
+        <span class="w-9 h-9 rounded-full border-2 border-white/15 border-t-indigo-400 animate-spin" />
         解析中…
       </div>
-      <div
-        v-if="error"
-        class="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm text-sm text-red-400 px-6 text-center"
-      >
+      <div v-if="error"
+        class="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm text-sm text-red-400 px-6 text-center">
         {{ error }}
       </div>
     </div>
@@ -183,21 +166,16 @@ onBeforeUnmount(destroyHls);
     <!-- 上下集 -->
     <div v-if="episodes.length" class="flex items-center justify-center gap-3 mt-4">
       <button
-        class="btn text-sm px-3 bg-white/[0.045] ring-1 ring-white/[0.08] hover:bg-white/[0.09] hover:ring-white/20 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.045]"
-        :disabled="!prevEp"
-        @click="prevEp && goEp(prevEp.url, flag)"
-      >
+        class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11] disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.05]"
+        :disabled="!prevEp" @click="prevEp && goEp(prevEp.url, flag)">
         <span class="i-carbon-chevron-left" /> 上一集
       </button>
-      <span
-        class="text-xs text-gray-400 px-3 py-1 rounded-md bg-white/[0.045] ring-1 ring-white/[0.08] tabular-nums">
+      <span class="text-xs text-gray-400 px-3 py-1 rounded-md bg-white/[0.05] tabular-nums">
         {{ currentIndex >= 0 ? currentIndex + 1 : "?" }} / {{ episodes.length }}
       </span>
       <button
-        class="btn text-sm px-3 bg-white/[0.045] ring-1 ring-white/[0.08] hover:bg-white/[0.09] hover:ring-white/20 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.045]"
-        :disabled="!nextEp"
-        @click="nextEp && goEp(nextEp.url, flag)"
-      >
+        class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11] disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.05]"
+        :disabled="!nextEp" @click="nextEp && goEp(nextEp.url, flag)">
         下一集 <span class="i-carbon-chevron-right" />
       </button>
     </div>
@@ -209,13 +187,9 @@ onBeforeUnmount(destroyHls);
         切换线路
       </h2>
       <div class="flex flex-wrap gap-2">
-        <button
-          v-for="(l, i) in lines"
-          :key="l.from"
-          class="chip"
+        <button v-for="(l, i) in lines" :key="l.from" class="chip border-none"
           :class="i === lineIndex ? 'chip-active' : 'chip-idle'"
-          @click="l.episodes.length && goEp(l.episodes[0].url, l.from)"
-        >
+          @click="l.episodes.length && goEp(l.episodes[0].url, l.from)">
           {{ l.from }}
         </button>
       </div>
@@ -228,18 +202,11 @@ onBeforeUnmount(destroyHls);
         选集
       </h2>
       <div class="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
-        <button
-          v-for="ep in episodes"
-          :key="ep.url"
-          class="px-2 py-2 text-center text-sm rounded-lg truncate transition-all duration-200"
-          :class="
-            ep.url === playId
-              ? 'text-white bg-gradient-to-br from-indigo-500 to-violet-500 ring-1 ring-indigo-300/40 shadow-[0_6px_18px_-8px_rgba(99,102,241,0.95)]'
-              : 'bg-white/[0.045] text-gray-300 ring-1 ring-white/[0.08] hover:bg-white/[0.09] hover:ring-white/20 hover:text-white'
-          "
-          :title="ep.name"
-          @click="goEp(ep.url, flag)"
-        >
+        <button v-for="ep in episodes" :key="ep.url"
+          class="px-2 b-none py-2 text-center text-sm rounded-lg truncate transition-all duration-200" :class="ep.url === playId
+            ? 'text-white bg-gradient-to-br from-indigo-500 to-violet-500 shadow-[0_8px_22px_-10px_rgba(99,102,241,1)]'
+            : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11] hover:text-white'
+            " :title="ep.name" @click="goEp(ep.url, flag)">
           {{ ep.name }}
         </button>
       </div>

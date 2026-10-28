@@ -57,7 +57,7 @@ function doSearch() {
       <div class="page-wrap h-16 flex items-center gap-4">
         <RouterLink to="/" class="group flex items-center gap-2 shrink-0">
           <span
-            class="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 flex items-center justify-center text-sm font-bold ring-1 ring-white/25 shadow-[0_6px_20px_-6px_rgba(99,102,241,0.95)] transition-transform duration-300 group-hover:scale-105">
+            class="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 flex items-center justify-center text-sm font-bold shadow-[0_6px_20px_-6px_rgba(99,102,241,0.95)] transition-transform duration-300 group-hover:scale-105">
             橘
           </span>
           <span
@@ -93,7 +93,7 @@ function doSearch() {
             <!-- 右侧提示区（无按钮）：有内容时提示回车，无内容时展示快捷键 -->
             <div class="pointer-events-none absolute right-3 flex items-center">
               <kbd v-if="!keyword"
-                class="hidden lg:flex items-center px-1.5 h-5 rounded-md bg-white/[0.06] ring-1 ring-white/10 text-[10px] text-gray-500 select-none">
+                class="hidden lg:flex items-center px-1.5 h-5 rounded-md bg-white/[0.09] text-[10px] text-gray-500 select-none">
                 ⌘K
               </kbd>
               <span v-else class="hidden lg:inline text-[10px] text-gray-500">↵</span>
@@ -108,7 +108,7 @@ function doSearch() {
 
       <!-- 移动端抽屉 -->
       <div v-if="menuOpen" class="md:hidden border-t border-white/[0.07] px-4 py-3">
-        <div class="search-field flex items-center rounded-xl px-3 h-10 mb-3 bg-white/[0.05] ring-1 ring-white/[0.08]">
+        <div class="search-field flex items-center rounded-xl px-3 h-10 mb-3 bg-white/[0.07]">
           <span class="i-carbon-search text-gray-400" />
           <input v-model="keyword"
             class="bg-transparent border-0 border-none outline-none ring-0 shadow-none appearance-none text-sm px-2 flex-1 placeholder:text-gray-500 focus:outline-none focus:ring-0"

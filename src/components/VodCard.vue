@@ -15,13 +15,13 @@ defineProps<{ item: VodItem }>();
         暂无封面
       </div>
       <span v-if="item.vod_remarks"
-        class="absolute left-2 bottom-2 max-w-[calc(100%-1rem)] px-2 py-1 rounded-md text-[11px] leading-tight text-gray-100 bg-black/55 backdrop-blur-md ring-1 ring-white/15 truncate">
+        class="absolute left-2 bottom-2 max-w-[calc(100%-1rem)] px-2 py-1 rounded-md text-[11px] leading-tight text-gray-100 bg-black/65 backdrop-blur-md truncate">
         {{ item.vod_remarks }}
       </span>
       <span
         class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 bg-gradient-to-t from-black/70 via-black/25 to-transparent backdrop-blur-[2px]">
         <span
-          class="w-12 h-12 rounded-full bg-white/15 backdrop-blur-md ring-1 ring-white/40 flex items-center justify-center shadow-[0_8px_24px_-6px_rgba(99,102,241,0.95)] scale-90 group-hover:scale-100 transition-transform duration-300">
+          class="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center shadow-[0_8px_24px_-6px_rgba(99,102,241,0.95)] scale-90 group-hover:scale-100 transition-transform duration-300">
           <span class="i-carbon-play-filled text-white text-lg" />
         </span>
       </span>
