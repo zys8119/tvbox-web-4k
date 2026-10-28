@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@9.1.1",
   "scripts": {
     "dev": "vite & tsx watch server/main.ts",
     "build": "vue-tsc --noEmit && vite build",
@@ -10,6 +11,7 @@
   },
   "dependencies": {
     "hls.js": "^1.5.17",
+    "vite-plugin-vue-devtools": "^8.2.1",
     "vue": "^3.5.13",
     "vue-router": "^4.4.5"
   },

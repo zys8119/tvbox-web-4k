@@ -2,10 +2,17 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import UnoCSS from "unocss/vite";
 import { fileURLToPath, URL } from "node:url";
+import Devtools from "vite-plugin-vue-devtools";
 
 // 后端 Node 服务（node/main.ts）默认 3001，可用 VITE_API_TARGET 覆盖
 export default defineConfig({
-  plugins: [vue(), UnoCSS()],
+  plugins: [
+    vue(),
+    UnoCSS(),
+    Devtools({
+      launchEditor: "trae",
+    }),
+  ],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
