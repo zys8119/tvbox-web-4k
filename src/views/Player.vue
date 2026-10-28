@@ -28,8 +28,13 @@ const vodId = computed(() => String(route.query.vod ?? ""));
 /** 选集排序：false = 正序（默认），true = 倒序 */
 const desc = ref(false);
 
+/** 当前选中的线路 */
+const currentLine = computed<PlayLine | null>(
+  () => lines.value[lineIndex.value] ?? null,
+);
+
 /** 当前线路的剧集列表（由详情页传来 vod 时才有，用于选集/连播） */
-const episodes = computed(() => lines.value[lineIndex.value]?.episodes ?? []);
+const episodes = computed(() => currentLine.value?.episodes ?? []);
 
 /** 按排序展示的剧集列表（仅影响渲染，连播仍按原顺序） */
 const sortedEpisodes = computed(() =>
@@ -129,6 +134,22 @@ function goEp(url: string, from: string) {
   });
 }
 
+/**
+ * 切换线路（类似 tab）：尽量停留在相同集序号，
+ * 目标线路集数不足时回退到第一集。
+ */
+function switchLine(i: number) {
+  if (i === lineIndex.value) return;
+  const target = lines.value[i];
+  if (!target || !target.episodes.length) return;
+  const keep = currentIndex.value;
+  const ep =
+    keep >= 0 && keep < target.episodes.length
+      ? target.episodes[keep]
+      : target.episodes[0];
+  goEp(ep.url, target.from);
+}
+
 function onEnded() {
   if (nextEp.value) goEp(nextEp.value.url, flag.value);
 }
@@ -193,40 +214,46 @@ onBeforeUnmount(destroyHls);
         </div>
       </div>
 
-      <!-- 右：线路 + 选集 -->
-      <div class="space-y-4 min-w-0">
-        <!-- 线路切换 -->
-        <div v-if="lines.length > 1" class="panel">
-          <h2 class="section-title !text-sm mb-3">
-            <span class="title-bar !h-3" />
-            切换线路
-          </h2>
-          <div class="flex flex-wrap gap-2">
-            <button v-for="(l, i) in lines" :key="l.from" class="b-none chip"
-              :class="i === lineIndex ? 'chip-active' : 'chip-idle'"
-              @click="l.episodes.length && goEp(l.episodes[0].url, l.from)">
-              {{ l.from }}
-            </button>
-          </div>
-        </div>
+      <!-- 右：线路 tab + 选集（同一卡片，垂直布局） -->
+      <div v-if="lines.length" class="panel min-w-0 flex gap-0 !p-0 overflow-hidden">
+        <!-- 左侧垂直 tab：线路 -->
+        <aside
+          class="shrink-0 w-28 sm:w-32 border-r border-white/[0.07] bg-white/[0.02] flex flex-col max-h-[520px] overflow-y-auto">
+          <p class="px-3 pt-3 pb-2 text-[11px] tracking-wider text-gray-500">线路</p>
+          <button v-for="(l, i) in lines" :key="l.from"
+            class="b-none relative w-full px-3 py-2.5 text-left text-xs leading-snug transition-colors duration-200"
+            :class="i === lineIndex
+              ? 'text-white bg-indigo-500/15 font-medium'
+              : 'text-gray-400 hover:text-gray-100 hover:bg-white/[0.05]'
+              " :title="l.from + ' · ' + l.episodes.length + ' 集'" @click="switchLine(i)">
+            <!-- 选中态左侧竖条 -->
+            <span v-if="i === lineIndex"
+              class="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-gradient-to-b from-indigo-400 to-violet-500" />
+            <span class="block truncate">{{ l.from }}</span>
+            <span class="block text-[10px] text-gray-500 mt-0.5">
+              {{ l.episodes.length }} 集
+            </span>
+          </button>
+        </aside>
 
-        <!-- 选集 -->
-        <div v-if="episodes.length" class="panel">
+        <!-- 右侧内容：选集 -->
+        <div class="flex-1 min-w-0 p-4">
           <div class="flex items-center justify-between mb-3">
-            <h2 class="section-title !text-sm">
-              <span class="title-bar !h-3" />
-              选集
-              <span class="text-xs font-normal text-gray-500 ml-1">
+            <h2 class="section-title !text-sm min-w-0">
+              <span class="title-bar !h-3 shrink-0" />
+              <span class="truncate">{{ currentLine?.from ?? "选集" }}</span>
+              <span class="text-xs font-normal text-gray-500 ml-1 shrink-0">
                 共 {{ episodes.length }} 集
               </span>
             </h2>
-            <button class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
+            <button class="b-none btn text-xs px-2.5 py-1 shrink-0 bg-white/[0.05] hover:bg-white/[0.11]"
               :title="desc ? '当前倒序，点击切换为正序' : '当前正序，点击切换为倒序'" @click="desc = !desc">
               <span class="i-carbon-switch-layer-2" :class="desc ? 'rotate-180' : ''" />
               {{ desc ? "倒序" : "正序" }}
             </button>
           </div>
-          <div class="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-4 gap-2 max-h-[420px] overflow-y-auto pr-1">
+          <div v-if="episodes.length"
+            class="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-4 gap-2 max-h-[420px] overflow-y-auto pr-1">
             <button v-for="ep in sortedEpisodes" :key="ep.url"
               class="px-2 b-none py-2 text-center text-sm rounded-lg truncate transition-all duration-200" :class="ep.url === playId
                 ? 'text-white bg-gradient-to-br from-indigo-500 to-violet-500 shadow-[0_8px_22px_-10px_rgba(99,102,241,1)]'
@@ -235,6 +262,7 @@ onBeforeUnmount(destroyHls);
               {{ ep.name }}
             </button>
           </div>
+          <p v-else class="text-sm text-gray-500 py-8 text-center">该线路暂无剧集</p>
         </div>
       </div>
     </div>
