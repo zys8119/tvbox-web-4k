@@ -27,6 +27,23 @@
 import crypto from "node:crypto";
 import http from "node:http";
 import https from "node:https";
+import {
+  addFavorite,
+  clearHistory,
+  clearProgress,
+  deleteHistory,
+  getHistory,
+  getLatestProgress,
+  getMarks,
+  getProgress,
+  isFavorite,
+  listFavorites,
+  listHistory,
+  removeFavorite,
+  saveMarks,
+  saveProgress,
+  upsertHistory,
+} from "./db.ts";
 
 /* ============================== 常量 ============================== */
 
@@ -936,6 +953,44 @@ function sendJson(res: http.ServerResponse, code: number, data: unknown): void {
   res.end(body);
 }
 
+/** 读取并解析 JSON 请求体（限制 1MB，防止异常大包） */
+function readJsonBody(
+  req: http.IncomingMessage,
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on("data", (c: Buffer) => {
+      size += c.length;
+      if (size > 1024 * 1024) {
+        reject(new Error("请求体过大"));
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8").trim();
+      if (!raw) return resolve({});
+      try {
+        const obj = JSON.parse(raw);
+        resolve(obj && typeof obj === "object" ? obj : {});
+      } catch {
+        reject(new Error("请求体不是合法 JSON"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+/** 取字符串字段 */
+const str = (v: unknown): string => (typeof v === "string" ? v : "");
+/** 取数字字段 */
+const num = (v: unknown): number => {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url ?? "/", "http://localhost");
   const q = u.searchParams;
@@ -956,8 +1011,119 @@ const server = http.createServer(async (req, res) => {
           "GET /detail?id=<vod_id>  详情，含结构化 vod_play_list",
           "GET /play?flag=<线路名>&id=<剧集地址>  播放解析；id 可为直链或 Base64 payload，参数需 urlencode",
           "GET /search?wd=<关键词>  搜索",
+          "GET /api/history  观看历史列表",
+          "POST /api/history  写入/更新历史 {vod_id,vod_name,vod_pic,remarks,flag,ep_name,ep_url,vod}",
+          "DELETE /api/history?id=<vod_id>  删除单条；不带 id 则清空",
+          "GET /api/favorites  收藏列表",
+          "GET /api/favorites/status?id=<vod_id>  是否已收藏 {favorited}",
+          "POST /api/favorites  添加收藏 {vod_id,vod_name,vod_pic,remarks}",
+          "DELETE /api/favorites?id=<vod_id>  取消收藏",
+          "GET /api/progress?vod=<vod_id>&flag=<线路名>  取播放进度",
+          "POST /api/progress  保存进度 {vod_id,flag,ep_url,ep_name,position,duration}",
+          "DELETE /api/progress?vod=<vod_id>&flag=<线路名>  清除进度",
+          "GET /api/marks?vod=<vod_id>  取片头片尾 {intro,outro}",
+          "POST /api/marks  保存片头片尾 {vod_id,intro,outro}；传 0 表示取消",
         ],
       });
+    }
+
+    /* ---------- 本地数据接口（不依赖远端初始化，放在 ensureInit 之前） ---------- */
+
+    if (u.pathname === "/api/history") {
+      if (req.method === "GET") {
+        return sendJson(res, 200, { list: listHistory() });
+      }
+      if (req.method === "POST") {
+        const b = await readJsonBody(req);
+        upsertHistory({
+          vod_id: str(b.vod_id),
+          vod_name: str(b.vod_name),
+          vod_pic: str(b.vod_pic),
+          remarks: str(b.remarks),
+          flag: str(b.flag),
+          ep_name: str(b.ep_name),
+          ep_url: str(b.ep_url),
+          vod: str(b.vod),
+        });
+        return sendJson(res, 200, { ok: true });
+      }
+      if (req.method === "DELETE") {
+        const id = q.get("id") ?? "";
+        if (id) deleteHistory(id);
+        else clearHistory();
+        return sendJson(res, 200, { ok: true });
+      }
+      return sendJson(res, 405, { code: 0, msg: "method not allowed" });
+    }
+
+    if (u.pathname === "/api/favorites/status") {
+      const id = q.get("id") ?? "";
+      return sendJson(res, 200, { favorited: id ? isFavorite(id) : false });
+    }
+
+    if (u.pathname === "/api/favorites") {
+      if (req.method === "GET") {
+        return sendJson(res, 200, { list: listFavorites() });
+      }
+      if (req.method === "POST") {
+        const b = await readJsonBody(req);
+        addFavorite({
+          vod_id: str(b.vod_id),
+          vod_name: str(b.vod_name),
+          vod_pic: str(b.vod_pic),
+          remarks: str(b.remarks),
+        });
+        return sendJson(res, 200, { ok: true });
+      }
+      if (req.method === "DELETE") {
+        const id = q.get("id") ?? "";
+        if (id) removeFavorite(id);
+        return sendJson(res, 200, { ok: true });
+      }
+      return sendJson(res, 405, { code: 0, msg: "method not allowed" });
+    }
+
+    if (u.pathname === "/api/progress") {
+      const vod = q.get("vod") ?? "";
+      const flag = q.get("flag") ?? "";
+      if (req.method === "GET") {
+        const row = flag ? getProgress(vod, flag) : getLatestProgress(vod);
+        return sendJson(res, 200, row ?? {});
+      }
+      if (req.method === "POST") {
+        const b = await readJsonBody(req);
+        saveProgress({
+          vod_id: str(b.vod_id),
+          flag: str(b.flag),
+          ep_url: str(b.ep_url),
+          ep_name: str(b.ep_name),
+          position: num(b.position),
+          duration: num(b.duration),
+        });
+        return sendJson(res, 200, { ok: true });
+      }
+      if (req.method === "DELETE") {
+        clearProgress(vod, flag || undefined);
+        return sendJson(res, 200, { ok: true });
+      }
+      return sendJson(res, 405, { code: 0, msg: "method not allowed" });
+    }
+
+    if (u.pathname === "/api/marks") {
+      const vod = q.get("vod") ?? "";
+      if (req.method === "GET") {
+        return sendJson(res, 200, getMarks(vod));
+      }
+      if (req.method === "POST") {
+        const b = await readJsonBody(req);
+        const id = str(b.vod_id) || vod;
+        if (!id) return sendJson(res, 400, { code: 0, msg: "缺少 vod_id" });
+        const patch: { intro?: number; outro?: number } = {};
+        if (b.intro !== undefined) patch.intro = num(b.intro);
+        if (b.outro !== undefined) patch.outro = num(b.outro);
+        return sendJson(res, 200, saveMarks(id, patch));
+      }
+      return sendJson(res, 405, { code: 0, msg: "method not allowed" });
     }
 
     await ensureInit();

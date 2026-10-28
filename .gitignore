@@ -50,3 +50,7 @@ tsconfig.tsbuildinfo
 *.zip
 
 .trae
+
+*.db
+
+server/data/

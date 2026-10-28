@@ -4,8 +4,14 @@ import { useRoute, useRouter } from "vue-router";
 import Hls from "hls.js";
 import {
   fetchDetail,
+  fetchMarks,
   fetchPlay,
+  fetchProgress,
   parseHeader,
+  pushHistory,
+  saveMarksApi,
+  saveProgressApi,
+  type Marks,
   type PlayLine,
 } from "../api";
 
@@ -58,6 +64,140 @@ const nextEp = computed(() =>
     : null,
 );
 
+/* ============================== 进度 / 片头片尾 ============================== */
+
+/** 片头、片尾时间点（秒），0 表示未设置 */
+const marks = ref<Marks>({ intro: 0, outro: 0 });
+
+/** 播放进度保存节流标记 */
+let lastSaved = 0;
+
+/** 秒 -> mm:ss / hh:mm:ss */
+function fmtTime(sec: number): string {
+  if (!Number.isFinite(sec) || sec <= 0) return "00:00";
+  const s = Math.floor(sec);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${pad(h)}:${pad(m)}:${pad(ss)}` : `${pad(m)}:${pad(ss)}`;
+}
+
+/** 片头按钮文案 */
+const introLabel = computed(() =>
+  marks.value.intro > 0 ? `片头：${fmtTime(marks.value.intro)}` : "片头",
+);
+
+/** 片尾按钮文案 */
+const outroLabel = computed(() =>
+  marks.value.outro > 0 ? `片尾：${fmtTime(marks.value.outro)}` : "片尾",
+);
+
+/** 点击「片头」：未设置则记录当前时间，已设置则取消 */
+async function toggleIntro() {
+  if (!vodId.value) return;
+  const el = video.value;
+  if (marks.value.intro > 0) {
+    marks.value = await saveMarksApi({ vod_id: vodId.value, intro: 0 });
+    return;
+  }
+  if (!el) return;
+  marks.value = await saveMarksApi({
+    vod_id: vodId.value,
+    intro: Math.floor(el.currentTime),
+  });
+}
+
+/** 点击「片尾」：未设置则记录当前时间，已设置则取消 */
+async function toggleOutro() {
+  if (!vodId.value) return;
+  const el = video.value;
+  if (marks.value.outro > 0) {
+    marks.value = await saveMarksApi({ vod_id: vodId.value, outro: 0 });
+    return;
+  }
+  if (!el) return;
+  marks.value = await saveMarksApi({
+    vod_id: vodId.value,
+    outro: Math.floor(el.currentTime),
+  });
+}
+
+/** 跳到指定时间点 */
+function seekTo(sec: number) {
+  const el = video.value;
+  if (!el || sec <= 0) return;
+  el.currentTime = sec;
+  el.play().catch(() => { });
+}
+
+/** 保存播放进度（节流：距上次保存 >= 5 秒） */
+function saveProgress(force = false) {
+  const el = video.value;
+  if (!el || !vodId.value || !flag.value) return;
+  const t = Math.floor(el.currentTime);
+  if (!force && Math.abs(t - lastSaved) < 5) return;
+  lastSaved = t;
+  const ep = episodes.value[currentIndex.value];
+  saveProgressApi({
+    vod_id: vodId.value,
+    flag: flag.value,
+    ep_url: playId.value,
+    ep_name: ep?.name ?? "",
+    position: t,
+    duration: Math.floor(el.duration || 0),
+  }).catch(() => {
+    /* 进度保存失败不影响播放 */
+  });
+}
+
+/** 记录观看历史 */
+function recordHistory() {
+  if (!vodId.value) return;
+  const ep = episodes.value[currentIndex.value];
+  pushHistory({
+    vod_id: vodId.value,
+    vod_name: title.value,
+    flag: flag.value,
+    ep_name: ep?.name ?? "",
+    ep_url: playId.value,
+    vod: vodId.value,
+  }).catch(() => { });
+}
+
+/** 加载片头片尾标记 */
+async function loadMarks() {
+  if (!vodId.value) return;
+  try {
+    marks.value = await fetchMarks(vodId.value);
+  } catch {
+    marks.value = { intro: 0, outro: 0 };
+  }
+}
+
+/**
+ * 应用续播：优先用该线路已保存的进度；
+ * 若进度不属于当前剧集，则在设置了片头时自动跳过片头。
+ */
+async function applyResume() {
+  const el = video.value;
+  if (!el || !vodId.value) return;
+  try {
+    const p = await fetchProgress(vodId.value, flag.value);
+    if (p.ep_url && p.ep_url === playId.value && (p.position ?? 0) > 3) {
+      el.currentTime = p.position as number;
+      lastSaved = Math.floor(p.position as number);
+      return;
+    }
+  } catch {
+    /* 进度读取失败则忽略 */
+  }
+  if (marks.value.intro > 0) {
+    el.currentTime = marks.value.intro;
+    lastSaved = marks.value.intro;
+  }
+}
+
 function destroyHls() {
   if (hls) {
     hls.destroy();
@@ -94,15 +234,33 @@ async function attach(url: string, headers: Record<string, string>) {
   } else {
     el.src = url;
   }
-  el.play().catch(() => {
-    /* 浏览器可能拦截自动播放，交由用户点击 */
-  });
+
+  // 元数据就绪后再应用续播/跳片头，此时才可安全设置 currentTime
+  el.onloadedmetadata = async () => {
+    await applyResume();
+    el.play().catch(() => {
+      /* 浏览器可能拦截自动播放，交由用户点击 */
+    });
+  };
+
+  // 播放时间更新：节流保存进度 + 到达片尾标记时自动跳下一集
+  el.ontimeupdate = () => {
+    saveProgress();
+    const o = marks.value.outro;
+    if (o > 0 && el.duration && el.currentTime >= o) {
+      if (nextEp.value) goEp(nextEp.value.url, flag.value);
+    }
+  };
+
+  el.onplay = () => recordHistory();
 }
 
 async function load() {
   loading.value = true;
   error.value = "";
   title.value = String(route.query.name ?? "");
+  // 每次进入新剧集前先确保标记已加载，供续播跳片头使用
+  await loadMarks();
   try {
     const res = await fetchPlay(flag.value, playId.value);
     if (!res.url) {
@@ -177,7 +335,11 @@ watch(
 
 watch(vodId, () => loadEpisodes(), { immediate: true });
 
-onBeforeUnmount(destroyHls);
+onBeforeUnmount(() => {
+  // 离开页面前强制保存一次进度，避免最后一次进度丢失
+  saveProgress(true);
+  destroyHls();
+});
 </script>
 
 <template>
@@ -209,6 +371,44 @@ onBeforeUnmount(destroyHls);
             class="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm text-sm text-red-400 px-6 text-center">
             {{ error }}
           </div>
+        </div>
+
+        <!-- 片头 / 片尾设置 -->
+        <div v-if="vodId" class="panel mt-4 flex flex-wrap items-center gap-2 !py-2.5">
+          <span class="text-xs text-gray-500 mr-1">跳过设置</span>
+
+          <button class="b-none btn text-xs px-2.5 py-1" :class="marks.intro > 0
+              ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+              : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11]'
+            " :title="marks.intro > 0
+                ? '点击取消片头标记（当前 ' + fmtTime(marks.intro) + '）'
+                : '点击记录当前播放位置为片头'
+              " @click="toggleIntro">
+            <span class="i-carbon-skip-forward text-[10px]" />
+            {{ introLabel }}
+          </button>
+
+          <button class="b-none btn text-xs px-2.5 py-1" :class="marks.outro > 0
+              ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+              : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11]'
+            " :title="marks.outro > 0
+                ? '点击取消片尾标记（当前 ' + fmtTime(marks.outro) + '）'
+                : '点击记录当前播放位置为片尾'
+              " @click="toggleOutro">
+            <span class="i-carbon-skip-backward text-[10px]" />
+            {{ outroLabel }}
+          </button>
+
+          <button v-if="marks.intro > 0"
+            class="b-none btn text-xs px-2 py-1 bg-white/[0.05] hover:bg-white/[0.11] text-gray-400" title="跳到片头位置"
+            @click="seekTo(marks.intro)">
+            跳片头
+          </button>
+          <button v-if="marks.outro > 0"
+            class="b-none btn text-xs px-2 py-1 bg-white/[0.05] hover:bg-white/[0.11] text-gray-400" title="跳到片尾位置"
+            @click="seekTo(marks.outro)">
+            跳片尾
+          </button>
         </div>
 
         <!-- 上下集 -->

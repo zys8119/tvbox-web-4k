@@ -76,6 +76,24 @@ function doSearch() {
 
         <!-- 搜索 -->
         <div class="flex items-center gap-2 ml-auto">
+          <!-- 历史 / 收藏入口 -->
+          <RouterLink
+            to="/history"
+            class="b-none btn p-2 bg-white/5 hover:bg-white/[0.11] text-gray-400 hover:text-white"
+            title="观看历史"
+            active-class="!text-white !bg-white/10"
+          >
+            <span class="i-carbon-time" />
+          </RouterLink>
+          <RouterLink
+            to="/favorites"
+            class="b-none btn p-2 bg-white/5 hover:bg-white/[0.11] text-gray-400 hover:text-white"
+            title="我的收藏"
+            active-class="!text-white !bg-white/10"
+          >
+            <span class="i-carbon-favorite" />
+          </RouterLink>
+
           <div
             class="search-field group relative hidden sm:flex items-center h-10 rounded-xl overflow-hidden transition-[width,background-color,box-shadow] duration-300 ease-out"
             :class="searchFocus

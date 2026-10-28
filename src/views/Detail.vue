@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { fetchDetail, type VodDetail } from "../api";
+import {
+  addFavoriteApi,
+  fetchDetail,
+  fetchFavoriteStatus,
+  removeFavoriteApi,
+  type VodDetail,
+} from "../api";
 import { looksLikeHtml, sanitizeHtml } from "../utils/sanitize";
 
 const route = useRoute();
@@ -13,10 +19,22 @@ const expanded = ref(false);
 
 const id = computed(() => String(route.params.id ?? ""));
 
+/** 是否已收藏 */
+const favorited = ref(false);
+/** 收藏按钮防抖 */
+const favBusy = ref(false);
+
 onMounted(async () => {
   try {
     const data = await fetchDetail(id.value);
     detail.value = data.list[0] ?? null;
+    // 查询收藏状态
+    try {
+      const s = await fetchFavoriteStatus(id.value);
+      favorited.value = s.favorited;
+    } catch {
+      favorited.value = false;
+    }
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -45,6 +63,30 @@ const introIsHtml = computed(() => looksLikeHtml(detail.value?.vod_content));
 
 /** 清洗后的简介 HTML，仅在 introIsHtml 为真时使用 */
 const safeIntro = computed(() => sanitizeHtml(detail.value?.vod_content));
+
+/** 切换收藏 */
+async function toggleFavorite() {
+  if (!detail.value || favBusy.value) return;
+  favBusy.value = true;
+  try {
+    if (favorited.value) {
+      await removeFavoriteApi(detail.value.vod_id);
+      favorited.value = false;
+    } else {
+      await addFavoriteApi({
+        vod_id: detail.value.vod_id,
+        vod_name: detail.value.vod_name,
+        vod_pic: detail.value.vod_pic,
+        remarks: detail.value.vod_remarks,
+      });
+      favorited.value = true;
+    }
+  } catch {
+    /* 收藏失败保持原状态 */
+  } finally {
+    favBusy.value = false;
+  }
+}
 
 /** 跳转到本站播放页（flag=线路名，id=剧集地址，vod=影片id 用于选集） */
 function playTo(from: string, url: string) {
@@ -103,11 +145,20 @@ function playTo(from: string, url: string) {
               </div>
             </dl>
 
-            <RouterLink v-if="episodes.length && currentLine" :to="playTo(currentLine.from, episodes[0].url)"
-              class="btn-primary w-full">
-              <span class="i-carbon-play-filled" />
-              播放第 1 集
-            </RouterLink>
+            <div class="flex gap-2">
+              <RouterLink v-if="episodes.length && currentLine" :to="playTo(currentLine.from, episodes[0].url)"
+                class="btn-primary flex-1">
+                <span class="i-carbon-play-filled" />
+                播放第 1 集
+              </RouterLink>
+
+              <button class="b-none btn shrink-0 px-3" :class="favorited
+                ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
+                : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11]'
+                " :disabled="favBusy" :title="favorited ? '取消收藏' : '加入收藏'" @click="toggleFavorite">
+                <span :class="favorited ? 'i-carbon-favorite-filled' : 'i-carbon-favorite'" />
+              </button>
+            </div>
           </div>
         </section>
 

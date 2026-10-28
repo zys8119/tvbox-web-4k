@@ -8,6 +8,8 @@ import Category from "./views/Category.vue";
 import Search from "./views/Search.vue";
 import Detail from "./views/Detail.vue";
 import Player from "./views/Player.vue";
+import History from "./views/History.vue";
+import Favorites from "./views/Favorites.vue";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -17,6 +19,8 @@ const router = createRouter({
     { path: "/search", name: "search", component: Search },
     { path: "/detail/:id", name: "detail", component: Detail },
     { path: "/play", name: "play", component: Player },
+    { path: "/history", name: "history", component: History },
+    { path: "/favorites", name: "favorites", component: Favorites },
     { path: "/:pathMatch(.*)*", redirect: "/" },
   ],
   scrollBehavior: () => ({ top: 0 }),
