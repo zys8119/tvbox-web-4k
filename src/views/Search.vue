@@ -54,11 +54,11 @@ watch(() => route.query.wd, run, { immediate: true });
           class="bg-transparent border-0 border-none outline-none ring-0 shadow-none appearance-none text-sm px-3 flex-1 placeholder:text-gray-500 focus:outline-none focus:ring-0"
           placeholder="输入片名、演员、导演…" @keyup.enter="submit" />
       </div>
-      <button class="btn-primary h-11 px-6" @click="submit">搜索</button>
     </div>
 
-    <p v-if="route.query.wd" class="text-sm text-gray-400 mb-4">
-      “{{ route.query.wd }}” 的搜索结果
+    <p v-if="route.query.wd" class="text-sm text-gray-400 mb-5 flex items-center gap-2">
+      <span class="i-carbon-search text-xs text-gray-500" />
+      “<span class="text-gray-200">{{ route.query.wd }}</span>” 的搜索结果
     </p>
 
     <p v-if="error" class="text-center text-red-400 py-20">{{ error }}</p>

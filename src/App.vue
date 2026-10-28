@@ -41,11 +41,6 @@ function onGlobalKeydown(e: KeyboardEvent) {
   searchInput.value?.focus();
 }
 
-function clearKeyword() {
-  keyword.value = "";
-  searchInput.value?.focus();
-}
-
 function doSearch() {
   const wd = keyword.value.trim();
   if (!wd) return;
@@ -55,23 +50,26 @@ function doSearch() {
 </script>
 
 <template>
-  <div class="min-h-full flex flex-col bg-[#0b0c10]">
+  <div class="min-h-full flex flex-col">
     <!-- 顶部导航 -->
-    <header class="sticky top-0 z-30 backdrop-blur bg-[#0b0c10]/85 border-b border-white/5">
+    <header
+      class="sticky top-0 z-30 bg-[#0a0b0f]/70 backdrop-blur-2xl border-b border-white/[0.07] shadow-[0_8px_32px_-16px_rgba(0,0,0,0.9)]">
       <div class="page-wrap h-16 flex items-center gap-4">
-        <RouterLink to="/" class="flex items-center gap-2 shrink-0">
+        <RouterLink to="/" class="group flex items-center gap-2 shrink-0">
           <span
-            class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center text-sm font-bold">
+            class="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 flex items-center justify-center text-sm font-bold ring-1 ring-white/25 shadow-[0_6px_20px_-6px_rgba(99,102,241,0.95)] transition-transform duration-300 group-hover:scale-105">
             橘
           </span>
-          <span class="text-lg font-semibold tracking-wide">橘汁影视</span>
+          <span
+            class="text-lg font-semibold tracking-wide bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
+            橘汁影视
+          </span>
         </RouterLink>
 
         <!-- 桌面端分类 -->
-        <nav class="hidden md:flex items-center gap-1 flex-1 overflow-x-auto">
-          <RouterLink v-for="n in navs" :key="n.type_id" :to="`/category/${n.type_id}`"
-            class="px-3 py-1.5 rounded-lg text-sm text-gray-300 hover:text-white hover:bg-white/5 whitespace-nowrap"
-            active-class="!text-white !bg-white/10">
+        <nav class="hidden md:flex items-center gap-1.5 flex-1 overflow-x-auto">
+          <RouterLink v-for="n in navs" :key="n.type_id" :to="`/category/${n.type_id}`" class="chip chip-idle !py-1.5"
+            active-class="chip-active">
             {{ n.type_name }}
           </RouterLink>
         </nav>
@@ -92,24 +90,14 @@ function doSearch() {
               class="w-full h-full bg-transparent border-0 border-none outline-none ring-0 appearance-none shadow-none text-sm pl-9 pr-20 text-gray-100 placeholder:text-gray-500 placeholder:transition-colors focus:outline-none focus:ring-0"
               placeholder="搜索片名、演员…" @focus="searchFocus = true" @blur="searchFocus = false" @keyup.enter="doSearch" />
 
-            <!-- 右侧操作区 -->
-            <div class="absolute right-2 flex items-center gap-1">
-              <button v-if="keyword"
-                class="w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-                title="清空" @click="clearKeyword">
-                <span class="i-carbon-close text-xs" />
-              </button>
-              <kbd v-else
-                class="hidden lg:flex items-center px-1.5 h-5 rounded border border-white/10 bg-white/5 text-[10px] text-gray-500 select-none">
+            <!-- 右侧提示区（无按钮）：有内容时提示回车，无内容时展示快捷键 -->
+            <div class="pointer-events-none absolute right-3 flex items-center">
+              <kbd v-if="!keyword"
+                class="hidden lg:flex items-center px-1.5 h-5 rounded-md bg-white/[0.06] ring-1 ring-white/10 text-[10px] text-gray-500 select-none">
                 ⌘K
               </kbd>
-              <button v-if="keyword"
-                class="w-6 h-6 rounded-md bg-indigo-500/90 text-white flex items-center justify-center hover:bg-indigo-400 transition-colors"
-                title="搜索" @click="doSearch">
-                <span class="i-carbon-arrow-right text-xs" />
-              </button>
+              <span v-else class="hidden lg:inline text-[10px] text-gray-500">↵</span>
             </div>
-
           </div>
 
           <button class="md:hidden btn bg-white/5 p-2" @click="menuOpen = !menuOpen">
@@ -119,15 +107,16 @@ function doSearch() {
       </div>
 
       <!-- 移动端抽屉 -->
-      <div v-if="menuOpen" class="md:hidden border-t border-white/5 px-4 py-3">
-        <div class="flex items-center bg-white/5 rounded-lg px-3 h-9 mb-3 border border-white/10">
+      <div v-if="menuOpen" class="md:hidden border-t border-white/[0.07] px-4 py-3">
+        <div class="search-field flex items-center rounded-xl px-3 h-10 mb-3 bg-white/[0.05] ring-1 ring-white/[0.08]">
           <span class="i-carbon-search text-gray-400" />
-          <input v-model="keyword" class="bg-transparent outline-none text-sm px-2 flex-1" placeholder="搜索片名…"
-            @keyup.enter="doSearch" />
+          <input v-model="keyword"
+            class="bg-transparent border-0 border-none outline-none ring-0 shadow-none appearance-none text-sm px-2 flex-1 placeholder:text-gray-500 focus:outline-none focus:ring-0"
+            placeholder="搜索片名…" @keyup.enter="doSearch" />
         </div>
         <div class="grid grid-cols-3 gap-2">
           <RouterLink v-for="n in navs" :key="n.type_id" :to="`/category/${n.type_id}`"
-            class="px-2 py-2 text-center rounded-lg text-sm bg-white/5 hover:bg-white/10" @click="menuOpen = false">
+            class="chip chip-idle text-center justify-center" active-class="chip-active" @click="menuOpen = false">
             {{ n.type_name }}
           </RouterLink>
         </div>
@@ -143,8 +132,8 @@ function doSearch() {
       </RouterView>
     </main>
 
-    <footer class="border-t border-white/5 py-6 text-center text-xs text-gray-500">
-      橘汁影视 · 仅供学习交流使用
+    <footer class="mt-8 border-t border-white/[0.07] py-8 text-center text-xs text-gray-500">
+      <p class="tracking-wide">橘汁影视 · 仅供学习交流使用</p>
     </footer>
   </div>
 </template>

@@ -28,20 +28,30 @@ function go(p: number) {
 
 <template>
   <div class="flex items-center justify-center gap-1.5 py-8 flex-wrap">
-    <button class="btn bg-white/5 hover:bg-white/10 text-sm" @click="go(page - 1)">
+    <button
+      class="btn text-sm px-3 bg-white/[0.045] ring-1 ring-white/[0.08] hover:bg-white/[0.09] hover:ring-white/20"
+      @click="go(page - 1)"
+    >
       上一页
     </button>
     <template v-for="it in pages" :key="it.page">
       <span v-if="it.ellipsis" class="text-gray-600 px-1">…</span>
       <button
-        class="btn text-sm min-w-9"
-        :class="it.page === page ? 'bg-indigo-500 text-white' : 'bg-white/5 hover:bg-white/10'"
+        class="btn text-sm min-w-9 px-2"
+        :class="
+          it.page === page
+            ? 'text-white bg-gradient-to-br from-indigo-500 to-violet-500 ring-1 ring-indigo-300/40 shadow-[0_6px_18px_-8px_rgba(99,102,241,0.95)]'
+            : 'bg-white/[0.045] ring-1 ring-white/[0.08] hover:bg-white/[0.09] hover:ring-white/20'
+        "
         @click="go(it.page)"
       >
         {{ it.page }}
       </button>
     </template>
-    <button class="btn bg-white/5 hover:bg-white/10 text-sm" @click="go(page + 1)">
+    <button
+      class="btn text-sm px-3 bg-white/[0.045] ring-1 ring-white/[0.08] hover:bg-white/[0.09] hover:ring-white/20"
+      @click="go(page + 1)"
+    >
       下一页
     </button>
   </div>

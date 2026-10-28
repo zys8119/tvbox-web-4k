@@ -14,12 +14,30 @@ body,
 
 body {
   margin: 0;
-  background: #0b0c10;
   color: #e6e8ee;
   font-family:
     -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei",
     "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* 暗色玻璃拟态底色：多层氛围光，为 backdrop-blur 提供可折射的色彩 */
+  background-color: #0a0b0f;
+  background-image:
+    radial-gradient(
+      900px 520px at 12% -8%,
+      rgba(99, 102, 241, 0.22),
+      transparent 62%
+    ),
+    radial-gradient(
+      760px 460px at 88% 2%,
+      rgba(168, 85, 247, 0.16),
+      transparent 60%
+    ),
+    radial-gradient(
+      820px 560px at 50% 108%,
+      rgba(56, 189, 248, 0.12),
+      transparent 64%
+    );
+  background-attachment: fixed;
 }
 
 a {

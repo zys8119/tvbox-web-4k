@@ -90,31 +90,26 @@ watch(
 <template>
     <div class="page-wrap py-5">
         <!-- 分类 Tab -->
-        <div class="flex items-center gap-1.5 overflow-x-auto pb-3 mb-2">
+        <div class="flex items-center gap-2 overflow-x-auto pb-3 mb-3">
             <RouterLink v-for="c in classes" :key="c.type_id" :to="`/category/${c.type_id}`"
-                class="px-3.5 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors" :class="c.type_id === tid
-                    ? 'bg-indigo-500 text-white'
-                    : 'bg-white/5 text-gray-300 hover:bg-white/10'
-                    ">
+                class="chip" :class="c.type_id === tid ? 'chip-active' : 'chip-idle'">
                 {{ c.type_name }}
             </RouterLink>
         </div>
 
         <!-- 筛选器 -->
-        <div v-if="groups.length" class="mb-5 rounded-xl bg-white/[0.03] p-3 space-y-2">
+        <div v-if="groups.length" class="panel mb-6 space-y-2.5">
             <div v-for="g in groups" :key="g.key" class="flex items-start gap-3 text-sm">
-                <span class="shrink-0 text-gray-500 w-14 pt-1">{{ g.name }}</span>
+                <span class="shrink-0 w-14 pt-1 text-[13px] text-gray-500">{{ g.name }}</span>
                 <div class="flex flex-wrap gap-1.5">
-                    <button class="px-2.5 py-1 rounded-md transition-colors" :class="!selected[g.key]
-                        ? 'bg-indigo-500/90 text-white'
-                        : 'bg-white/5 text-gray-300 hover:bg-white/10'
-                        " @click="pick(g.key, '')">
+                    <button class="chip !py-1 !px-2.5"
+                        :class="!selected[g.key] ? 'chip-active' : 'chip-idle'"
+                        @click="pick(g.key, '')">
                         全部
                     </button>
-                    <button v-for="v in g.value" :key="v.v" class="px-2.5 py-1 rounded-md transition-colors" :class="selected[g.key] === v.v
-                        ? 'bg-indigo-500/90 text-white'
-                        : 'bg-white/5 text-gray-300 hover:bg-white/10'
-                        " @click="pick(g.key, v.v)">
+                    <button v-for="v in g.value" :key="v.v" class="chip !py-1 !px-2.5"
+                        :class="selected[g.key] === v.v ? 'chip-active' : 'chip-idle'"
+                        @click="pick(g.key, v.v)">
                         {{ v.n }}
                     </button>
                 </div>
