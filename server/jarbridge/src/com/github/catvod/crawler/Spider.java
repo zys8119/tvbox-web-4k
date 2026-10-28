@@ -27,8 +27,9 @@ public class Spider {
     this.api = api;
   }
 
+  /** 安全 DNS：直接交给系统解析 */
   public static Dns safeDns() {
-    return null;
+    return Dns.SYSTEM;
   }
 
   public String homeContent(boolean filter) {

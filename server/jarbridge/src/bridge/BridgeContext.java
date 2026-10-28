@@ -73,9 +73,11 @@ public class BridgeContext extends Application {
     return null;
   }
 
+  private final PackageManager pm = new PackageManager();
+
   @Override
   public PackageManager getPackageManager() {
-    return null;
+    return pm;
   }
 
   @Override

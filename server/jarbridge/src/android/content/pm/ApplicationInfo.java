@@ -7,5 +7,6 @@ public class ApplicationInfo {
   public int banner;
   public java.lang.String dataDir;
   public java.lang.String sourceDir;
+  public java.lang.String packageName;
   public int targetSdkVersion;
 }
