@@ -153,6 +153,18 @@ function switchLine(i: number) {
   goEp(ep.url, target.from);
 }
 
+/**
+ * 返回：只允许回到详情页或首页。
+ * 有 vod 参数时回详情页，否则回首页，避免 back() 回到站外或空历史。
+ */
+function goBack() {
+  if (vodId.value) {
+    router.push({ name: "detail", params: { id: vodId.value } });
+  } else {
+    router.push({ name: "home" });
+  }
+}
+
 function onEnded() {
   if (nextEp.value) goEp(nextEp.value.url, flag.value);
 }
@@ -171,7 +183,7 @@ onBeforeUnmount(destroyHls);
 <template>
   <div class="page-wrap py-4">
     <div class="mb-4 flex items-center gap-2 min-h-9">
-      <button class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11]" @click="router.back()">
+      <button class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11]" @click="goBack">
         <span class="i-carbon-arrow-left" /> 返回
       </button>
       <h1 class="text-base md:text-lg font-medium truncate">
