@@ -158,76 +158,84 @@ onBeforeUnmount(destroyHls);
       </h1>
     </div>
 
-    <div
-      class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_26px_70px_-30px_rgba(0,0,0,1)]">
-      <video ref="video" class="w-full h-full" controls playsinline autoplay @ended="onEnded" />
-      <div v-if="loading"
-        class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-sm text-gray-300">
-        <span class="w-9 h-9 rounded-full border-2 border-white/15 border-t-indigo-400 animate-spin" />
-        解析中…
-      </div>
-      <div v-if="error"
-        class="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm text-sm text-red-400 px-6 text-center">
-        {{ error }}
-      </div>
-    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] gap-6 items-start">
+      <!-- 左：播放器 + 上下集 -->
+      <div class="min-w-0">
+        <div
+          class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_26px_70px_-30px_rgba(0,0,0,1)]">
+          <video ref="video" class="w-full h-full" controls playsinline autoplay @ended="onEnded" />
+          <div v-if="loading"
+            class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-sm text-gray-300">
+            <span class="w-9 h-9 rounded-full border-2 border-white/15 border-t-indigo-400 animate-spin" />
+            解析中…
+          </div>
+          <div v-if="error"
+            class="absolute inset-0 flex items-center justify-center bg-black/80 backdrop-blur-sm text-sm text-red-400 px-6 text-center">
+            {{ error }}
+          </div>
+        </div>
 
-    <!-- 上下集 -->
-    <div v-if="episodes.length" class="flex items-center justify-center gap-3 mt-4">
-      <button
-        class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11] disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.05]"
-        :disabled="!prevEp" @click="prevEp && goEp(prevEp.url, flag)">
-        <span class="i-carbon-chevron-left" /> 上一集
-      </button>
-      <span class="text-xs text-gray-400 px-3 py-1 rounded-md bg-white/[0.05] tabular-nums">
-        {{ currentIndex >= 0 ? currentIndex + 1 : "?" }} / {{ episodes.length }}
-      </span>
-      <button
-        class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11] disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.05]"
-        :disabled="!nextEp" @click="nextEp && goEp(nextEp.url, flag)">
-        下一集 <span class="i-carbon-chevron-right" />
-      </button>
-    </div>
-
-    <!-- 线路切换 -->
-    <div v-if="lines.length > 1" class="panel mt-6">
-      <h2 class="section-title !text-sm mb-3">
-        <span class="title-bar !h-3" />
-        切换线路
-      </h2>
-      <div class="flex flex-wrap gap-2">
-        <button v-for="(l, i) in lines" :key="l.from" class="b-none chip"
-          :class="i === lineIndex ? 'chip-active' : 'chip-idle'"
-          @click="l.episodes.length && goEp(l.episodes[0].url, l.from)">
-          {{ l.from }}
-        </button>
-      </div>
-    </div>
-
-    <!-- 选集 -->
-    <div v-if="episodes.length" class="panel mt-4">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="section-title !text-sm">
-          <span class="title-bar !h-3" />
-          选集
-          <span class="text-xs font-normal text-gray-500 ml-1">
-            共 {{ episodes.length }} 集
+        <!-- 上下集 -->
+        <div v-if="episodes.length" class="flex items-center justify-center gap-3 mt-4">
+          <button
+            class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11] disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.05]"
+            :disabled="!prevEp" @click="prevEp && goEp(prevEp.url, flag)">
+            <span class="i-carbon-chevron-left" /> 上一集
+          </button>
+          <span class="text-xs text-gray-400 px-3 py-1 rounded-md bg-white/[0.05] tabular-nums">
+            {{ currentIndex >= 0 ? currentIndex + 1 : "?" }} / {{ episodes.length }}
           </span>
-        </h2>
-        <button class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
-          :title="desc ? '当前倒序，点击切换为正序' : '当前正序，点击切换为倒序'" @click="desc = !desc">
-          <span class="i-carbon-switch-layer-2" :class="desc ? 'rotate-180' : ''" />
-          {{ desc ? "倒序" : "正序" }}
-        </button>
+          <button
+            class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11] disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-white/[0.05]"
+            :disabled="!nextEp" @click="nextEp && goEp(nextEp.url, flag)">
+            下一集 <span class="i-carbon-chevron-right" />
+          </button>
+        </div>
       </div>
-      <div class="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
-        <button v-for="ep in sortedEpisodes" :key="ep.url"
-          class="px-2 b-none py-2 text-center text-sm rounded-lg truncate transition-all duration-200" :class="ep.url === playId
-            ? 'text-white bg-gradient-to-br from-indigo-500 to-violet-500 shadow-[0_8px_22px_-10px_rgba(99,102,241,1)]'
-            : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11] hover:text-white'
-            " :title="ep.name" @click="goEp(ep.url, flag)">
-          {{ ep.name }}
-        </button>
+
+      <!-- 右：线路 + 选集 -->
+      <div class="space-y-4 min-w-0">
+        <!-- 线路切换 -->
+        <div v-if="lines.length > 1" class="panel">
+          <h2 class="section-title !text-sm mb-3">
+            <span class="title-bar !h-3" />
+            切换线路
+          </h2>
+          <div class="flex flex-wrap gap-2">
+            <button v-for="(l, i) in lines" :key="l.from" class="b-none chip"
+              :class="i === lineIndex ? 'chip-active' : 'chip-idle'"
+              @click="l.episodes.length && goEp(l.episodes[0].url, l.from)">
+              {{ l.from }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 选集 -->
+        <div v-if="episodes.length" class="panel">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="section-title !text-sm">
+              <span class="title-bar !h-3" />
+              选集
+              <span class="text-xs font-normal text-gray-500 ml-1">
+                共 {{ episodes.length }} 集
+              </span>
+            </h2>
+            <button class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
+              :title="desc ? '当前倒序，点击切换为正序' : '当前正序，点击切换为倒序'" @click="desc = !desc">
+              <span class="i-carbon-switch-layer-2" :class="desc ? 'rotate-180' : ''" />
+              {{ desc ? "倒序" : "正序" }}
+            </button>
+          </div>
+          <div class="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-4 gap-2 max-h-[420px] overflow-y-auto pr-1">
+            <button v-for="ep in sortedEpisodes" :key="ep.url"
+              class="px-2 b-none py-2 text-center text-sm rounded-lg truncate transition-all duration-200" :class="ep.url === playId
+                ? 'text-white bg-gradient-to-br from-indigo-500 to-violet-500 shadow-[0_8px_22px_-10px_rgba(99,102,241,1)]'
+                : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11] hover:text-white'
+                " :title="ep.name" @click="goEp(ep.url, flag)">
+              {{ ep.name }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
