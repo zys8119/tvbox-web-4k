@@ -5,6 +5,8 @@ import {
   removeFavoriteApi,
   type FavoriteItem,
 } from "../api";
+import { haystackOf, matchKeyword } from "../utils/search";
+import SearchBox from "../components/SearchBox.vue";
 
 const list = ref<FavoriteItem[]>([]);
 const loading = ref(true);
@@ -12,12 +14,12 @@ const error = ref("");
 /** 搜索关键词 */
 const keyword = ref("");
 
-/** 搜索过滤：片名、备注 */
+/** 搜索过滤：片名、备注，支持中文/全拼/首字母 */
 const filtered = computed(() => {
-  const kw = keyword.value.trim().toLowerCase();
+  const kw = keyword.value.trim();
   if (!kw) return list.value;
   return list.value.filter((x) =>
-    [x.vod_name, x.remarks].join(" ").toLowerCase().includes(kw),
+    matchKeyword(haystackOf(x, [x.vod_name, x.remarks].join(" ")), kw),
   );
 });
 
@@ -58,18 +60,9 @@ onMounted(load);
       </h2>
     </div>
 
-    <!-- 搜索 -->
-    <div v-if="list.length"
-      class="search-field mb-5 flex items-center rounded-xl px-3 h-10 bg-white/[0.05] transition-colors focus-within:bg-white/[0.09]">
-      <span class="i-carbon-search text-gray-500 text-sm" />
-      <input v-model="keyword" type="text"
-        class="bg-transparent border-0 border-none outline-none ring-0 shadow-none appearance-none text-sm px-2 flex-1 placeholder:text-gray-500 focus:outline-none focus:ring-0"
-        placeholder="搜索片名、备注…" />
-      <button v-if="keyword"
-        class="b-none w-6 h-6 rounded-full flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/10"
-        title="清空搜索" @click="keyword = ''">
-        <span class="i-carbon-close text-xs" />
-      </button>
+    <!-- 搜索：支持拼音/首字母，带搜索记录 -->
+    <div v-if="list.length" class="mb-5">
+      <SearchBox v-model="keyword" scope="favorites" placeholder="搜索片名、备注，支持拼音…" />
     </div>
 
     <p v-if="error" class="text-center text-red-400 py-20">{{ error }}</p>
