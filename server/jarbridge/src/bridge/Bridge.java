@@ -33,6 +33,7 @@ public class Bridge {
   private static final Context CTX = new BridgeContext();
 
   public static void main(String[] args) throws Exception {
+    injectInitContext();
     BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
     String line;
     while ((line = in.readLine()) != null) {
@@ -60,6 +61,22 @@ public class Bridge {
         OUT.println("{\"id\":" + Json.quote(id) + ",\"ok\":false,\"error\":" + Json.quote(msg) + "}");
         t.printStackTrace(System.err);
       }
+    }
+  }
+
+  /**
+   * 把 BridgeContext 注入 com.github.catvod.spider.Init 的单例字段 c，
+   * 使爬虫内部 Init.context() 能拿到可用 Context。
+   */
+  private static void injectInitContext() {
+    try {
+      Class<?> ic = Class.forName("com.github.catvod.spider.Init");
+      Object inst = ic.getMethod("get").invoke(null);
+      java.lang.reflect.Field f = ic.getDeclaredField("c");
+      f.setAccessible(true);
+      f.set(inst, CTX);
+    } catch (Throwable t) {
+      System.err.println("[bridge] inject Init.context failed: " + t);
     }
   }
 
