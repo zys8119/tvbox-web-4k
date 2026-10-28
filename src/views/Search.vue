@@ -48,15 +48,11 @@ watch(() => route.query.wd, run, { immediate: true });
   <div class="page-wrap py-6">
     <div class="flex items-center gap-2 mb-6">
       <div
-        class="flex-1 flex items-center bg-white/5 rounded-xl px-4 h-11 border border-white/10 focus-within:border-indigo-400/60"
-      >
+        class="search-field flex-1 flex items-center bg-white/5 rounded-xl px-4 h-11 transition-colors duration-200 focus-within:bg-white/[0.09]">
         <span class="i-carbon-search text-gray-400" />
-        <input
-          v-model="wd"
-          class="bg-transparent outline-none text-sm px-3 flex-1 placeholder:text-gray-500"
-          placeholder="输入片名、演员、导演…"
-          @keyup.enter="submit"
-        />
+        <input v-model="wd"
+          class="bg-transparent border-0 border-none outline-none ring-0 shadow-none appearance-none text-sm px-3 flex-1 placeholder:text-gray-500 focus:outline-none focus:ring-0"
+          placeholder="输入片名、演员、导演…" @keyup.enter="submit" />
       </div>
       <button class="btn-primary h-11 px-6" @click="submit">搜索</button>
     </div>
@@ -69,10 +65,7 @@ watch(() => route.query.wd, run, { immediate: true });
 
     <VodGrid :list="list" :loading="loading" :skeleton="14" />
 
-    <p
-      v-if="searched && !loading && !list.length && !error"
-      class="text-center text-gray-500 py-16"
-    >
+    <p v-if="searched && !loading && !list.length && !error" class="text-center text-gray-500 py-16">
       没有找到相关内容，换个关键词试试
     </p>
   </div>

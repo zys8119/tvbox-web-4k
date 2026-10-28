@@ -27,6 +27,40 @@ a {
   text-decoration: none;
 }
 
+/* 搜索框：彻底去掉输入框自带边框、外框、内阴影与自动填充底色 */
+.search-field input {
+  border: 0 none;
+  outline: 0 none;
+  box-shadow: none;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.search-field input:focus,
+.search-field input:active {
+  border: 0 none;
+  outline: 0 none;
+  box-shadow: none;
+}
+
+/* 去掉 Chrome/Safari 搜索框自带的清除按钮与自动填充高亮 */
+.search-field input::-webkit-search-decoration,
+.search-field input::-webkit-search-cancel-button,
+.search-field input::-webkit-search-results-button,
+.search-field input::-webkit-search-results-decoration {
+  display: none;
+  -webkit-appearance: none;
+}
+
+.search-field input:-webkit-autofill,
+.search-field input:-webkit-autofill:hover,
+.search-field input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #e6e8ee;
+  -webkit-box-shadow: 0 0 0 1000px transparent inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
