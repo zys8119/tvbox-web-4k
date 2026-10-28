@@ -110,9 +110,23 @@ export function upsertHistory(o: {
     o.vod ?? "",
     now(),
   );
+  // 只保留最近 1000 条，避免历史表无限增长
+  trimHistory();
 }
 
-export function listHistory(limit = 100): HistoryRow[] {
+/** 历史上限 */
+const HISTORY_LIMIT = 1000;
+
+/** 删除超出上限的旧记录 */
+function trimHistory(): void {
+  db.prepare(
+    `DELETE FROM history WHERE vod_id NOT IN (
+       SELECT vod_id FROM history ORDER BY updated_at DESC LIMIT ?
+     )`,
+  ).run(HISTORY_LIMIT);
+}
+
+export function listHistory(limit = 1000): HistoryRow[] {
   return db
     .prepare(
       `SELECT vod_id, vod_name, vod_pic, remarks, flag, ep_name, ep_url, vod, updated_at

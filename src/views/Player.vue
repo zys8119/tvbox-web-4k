@@ -22,6 +22,9 @@ const video = ref<HTMLVideoElement | null>(null);
 const loading = ref(true);
 const error = ref("");
 const title = ref("");
+/** 封面与备注：来自详情，用于写入观看历史 */
+const vodPic = ref("");
+const vodRemarks = ref("");
 const lines = ref<PlayLine[]>([]);
 
 let hls: Hls | null = null;
@@ -151,13 +154,15 @@ function saveProgress(force = false) {
   });
 }
 
-/** 记录观看历史 */
+/** 记录观看历史（含封面与备注，供历史列表展示） */
 function recordHistory() {
   if (!vodId.value) return;
   const ep = episodes.value[currentIndex.value];
   pushHistory({
     vod_id: vodId.value,
     vod_name: title.value,
+    vod_pic: vodPic.value,
+    remarks: vodRemarks.value,
     flag: flag.value,
     ep_name: ep?.name ?? "",
     ep_url: playId.value,
@@ -282,7 +287,12 @@ async function loadEpisodes() {
     const d = data.list[0];
     if (!d) return;
     title.value = title.value || d.vod_name;
+    // 缓存封面与备注，写入历史时一并保存
+    vodPic.value = d.vod_pic;
+    vodRemarks.value = d.vod_remarks;
     lines.value = d.vod_play_list;
+    // 详情就绪后补写一次历史，确保封面/备注能落到记录里
+    recordHistory();
   } catch {
     /* 选集信息失败不影响播放 */
   }
@@ -378,22 +388,22 @@ onBeforeUnmount(() => {
           <span class="text-xs text-gray-500 mr-1">跳过设置</span>
 
           <button class="b-none btn text-xs px-2.5 py-1" :class="marks.intro > 0
-              ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
-              : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11]'
+            ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+            : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11]'
             " :title="marks.intro > 0
-                ? '点击取消片头标记（当前 ' + fmtTime(marks.intro) + '）'
-                : '点击记录当前播放位置为片头'
+              ? '点击取消片头标记（当前 ' + fmtTime(marks.intro) + '）'
+              : '点击记录当前播放位置为片头'
               " @click="toggleIntro">
             <span class="i-carbon-skip-forward text-[10px]" />
             {{ introLabel }}
           </button>
 
           <button class="b-none btn text-xs px-2.5 py-1" :class="marks.outro > 0
-              ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
-              : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11]'
+            ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+            : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11]'
             " :title="marks.outro > 0
-                ? '点击取消片尾标记（当前 ' + fmtTime(marks.outro) + '）'
-                : '点击记录当前播放位置为片尾'
+              ? '点击取消片尾标记（当前 ' + fmtTime(marks.outro) + '）'
+              : '点击记录当前播放位置为片尾'
               " @click="toggleOutro">
             <span class="i-carbon-skip-backward text-[10px]" />
             {{ outroLabel }}
