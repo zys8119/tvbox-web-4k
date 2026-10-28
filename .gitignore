@@ -48,3 +48,5 @@ tsconfig.tsbuildinfo
 # 其它
 *.tar.gz
 *.zip
+
+.trae
