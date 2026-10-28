@@ -17,13 +17,18 @@ const loading = ref(true);
 const error = ref("");
 const title = ref("");
 const lines = ref<PlayLine[]>([]);
-const lineIndex = ref(0);
 
 let hls: Hls | null = null;
 
 const flag = computed(() => String(route.query.flag ?? ""));
 const playId = computed(() => String(route.query.id ?? ""));
 const vodId = computed(() => String(route.query.vod ?? ""));
+
+/** 当前线路索引：始终由 URL 上的 flag 推导，保证切换后高亮即时同步 */
+const lineIndex = computed(() => {
+  const i = lines.value.findIndex((l) => l.from === flag.value);
+  return i >= 0 ? i : 0;
+});
 
 /** 选集排序：false = 正序（默认），true = 倒序 */
 const desc = ref(false);
@@ -120,8 +125,6 @@ async function loadEpisodes() {
     if (!d) return;
     title.value = title.value || d.vod_name;
     lines.value = d.vod_play_list;
-    const idx = lines.value.findIndex((l) => l.from === flag.value);
-    lineIndex.value = idx >= 0 ? idx : 0;
   } catch {
     /* 选集信息失败不影响播放 */
   }
@@ -217,24 +220,52 @@ onBeforeUnmount(destroyHls);
       <!-- 右：线路 tab + 选集（同一卡片，垂直布局） -->
       <div v-if="lines.length" class="panel min-w-0 flex gap-0 !p-0 overflow-hidden">
         <!-- 左侧垂直 tab：线路 -->
-        <aside
-          class="shrink-0 w-28 sm:w-32 border-r border-white/[0.07] bg-white/[0.02] flex flex-col max-h-[520px] overflow-y-auto">
-          <p class="px-3 pt-3 pb-2 text-[11px] tracking-wider text-gray-500">线路</p>
-          <button v-for="(l, i) in lines" :key="l.from"
-            class="b-none relative w-full px-3 py-2.5 text-left text-xs leading-snug transition-colors duration-200"
-            :class="i === lineIndex
-              ? 'text-white bg-indigo-500/15 font-medium'
-              : 'text-gray-400 hover:text-gray-100 hover:bg-white/[0.05]'
-              " :title="l.from + ' · ' + l.episodes.length + ' 集'" @click="switchLine(i)">
-            <!-- 选中态左侧竖条 -->
-            <span v-if="i === lineIndex"
-              class="absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full bg-gradient-to-b from-indigo-400 to-violet-500" />
-            <span class="block truncate">{{ l.from }}</span>
-            <span class="block text-[10px] text-gray-500 mt-0.5">
-              {{ l.episodes.length }} 集
+        <aside class="shrink-0 w-32 sm:w-36 flex flex-col max-h-[520px] bg-white/[0.015]">
+          <div class="flex items-center gap-1.5 px-3.5 pt-3.5 pb-2.5">
+            <span class="i-carbon-list text-[11px] text-indigo-300/70" />
+            <p class="text-[11px] tracking-[0.18em] text-gray-500">线路</p>
+            <span class="ml-auto text-[10px] text-gray-600 tabular-nums">
+              {{ lines.length }}
             </span>
-          </button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+            <button v-for="(l, i) in lines" :key="l.from"
+              class="b-none group relative w-full overflow-hidden rounded-xl px-2.5 py-2 text-left transition-all duration-300 ease-out"
+              :class="i === lineIndex
+                ? 'bg-gradient-to-r from-indigo-500/25 via-violet-500/15 to-transparent shadow-[0_6px_18px_-10px_rgba(99,102,241,0.95)]'
+                : 'bg-[#12141c] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] hover:bg-[#171a24] hover:translate-x-[2px]'"
+              :title="l.from + ' · ' + l.episodes.length + ' 集'" @click="switchLine(i)">
+              <!-- 选中态左侧发光竖条：高度与透明度联动过渡 -->
+              <span
+                class="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 w-[3px] rounded-full bg-gradient-to-b from-indigo-400 via-violet-500 to-fuchsia-500 transition-all duration-300 ease-out"
+                :class="i === lineIndex
+                  ? 'h-8 opacity-100 shadow-[0_0_12px_rgba(139,92,246,1)]'
+                  : 'h-0 opacity-0'" />
+              <!-- 选中态右上角柔光，增强卡片质感 -->
+              <span
+                class="pointer-events-none absolute -right-5 -top-5 h-12 w-12 rounded-full bg-violet-500/30 blur-xl transition-opacity duration-300"
+                :class="i === lineIndex ? 'opacity-100' : 'opacity-0'" />
+
+              <span class="relative block truncate text-[13px] leading-snug transition-colors duration-200" :class="i === lineIndex
+                ? 'text-white font-semibold'
+                : 'text-gray-400 group-hover:text-gray-100'">
+                {{ l.from }}
+              </span>
+              <span
+                class="relative mt-1 flex items-center gap-1 text-[10px] tabular-nums transition-colors duration-200"
+                :class="i === lineIndex
+                  ? 'text-indigo-300/90'
+                  : 'text-gray-600 group-hover:text-gray-500'">
+                <span class="i-carbon-video text-[9px]" />
+                {{ l.episodes.length }} 集
+              </span>
+            </button>
+          </div>
         </aside>
+
+        <!-- 渐变分隔线（替代实线边框） -->
+        <span class="w-px shrink-0 bg-gradient-to-b from-transparent via-white/[0.12] to-transparent" />
 
         <!-- 右侧内容：选集 -->
         <div class="flex-1 min-w-0 p-4">
