@@ -10,7 +10,7 @@ export default defineConfig({
     vue(),
     UnoCSS(),
     Devtools({
-      launchEditor: "trae",
+      launchEditor: "./editor.sh",
     }),
   ],
   resolve: {
