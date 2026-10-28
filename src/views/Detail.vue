@@ -26,8 +26,17 @@ onMounted(async () => {
 const lines = computed(() => detail.value?.vod_play_list ?? []);
 const currentLine = computed(() => lines.value[lineIndex.value] ?? null);
 const episodes = computed(() => currentLine.value?.episodes ?? []);
+
+/** 选集排序：false = 正序（默认），true = 倒序 */
+const desc = ref(false);
+const sortedEpisodes = computed(() =>
+  desc.value ? [...episodes.value].reverse() : episodes.value,
+);
+
 const shownEpisodes = computed(() =>
-  expanded.value ? episodes.value : episodes.value.slice(0, 30),
+  expanded.value
+    ? sortedEpisodes.value
+    : sortedEpisodes.value.slice(0, 30),
 );
 
 /** 跳转到本站播放页（flag=线路名，id=剧集地址，vod=影片id 用于选集） */
@@ -111,10 +120,20 @@ function playTo(from: string, url: string) {
 
       <!-- 剧集 -->
       <section v-if="episodes.length" class="mb-8">
-        <h2 class="section-title mb-3">
-          <span class="title-bar" />
-          选集
-        </h2>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="section-title">
+            <span class="title-bar" />
+            选集
+            <span class="text-xs font-normal text-gray-500 ml-1">
+              共 {{ episodes.length }} 集
+            </span>
+          </h2>
+          <button class="btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
+            :title="desc ? '当前倒序，点击切换为正序' : '当前正序，点击切换为倒序'" @click="desc = !desc">
+            <span class="i-carbon-switch-layer-2" :class="desc ? 'rotate-180' : ''" />
+            {{ desc ? "倒序" : "正序" }}
+          </button>
+        </div>
         <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
           <RouterLink v-for="ep in shownEpisodes" :key="ep.url" :to="playTo(currentLine?.from ?? '', ep.url)"
             class="px-2 py-2 text-center text-sm rounded-lg truncate bg-white/[0.05] hover:bg-white/[0.11] hover:text-white transition-all duration-200"

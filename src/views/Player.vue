@@ -25,8 +25,17 @@ const flag = computed(() => String(route.query.flag ?? ""));
 const playId = computed(() => String(route.query.id ?? ""));
 const vodId = computed(() => String(route.query.vod ?? ""));
 
+/** 选集排序：false = 正序（默认），true = 倒序 */
+const desc = ref(false);
+
 /** 当前线路的剧集列表（由详情页传来 vod 时才有，用于选集/连播） */
 const episodes = computed(() => lines.value[lineIndex.value]?.episodes ?? []);
+
+/** 按排序展示的剧集列表（仅影响渲染，连播仍按原顺序） */
+const sortedEpisodes = computed(() =>
+  desc.value ? [...episodes.value].reverse() : episodes.value,
+);
+
 const currentIndex = computed(() =>
   episodes.value.findIndex((e) => e.url === playId.value),
 );
@@ -197,12 +206,22 @@ onBeforeUnmount(destroyHls);
 
     <!-- 选集 -->
     <div v-if="episodes.length" class="panel mt-4">
-      <h2 class="section-title !text-sm mb-3">
-        <span class="title-bar !h-3" />
-        选集
-      </h2>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="section-title !text-sm">
+          <span class="title-bar !h-3" />
+          选集
+          <span class="text-xs font-normal text-gray-500 ml-1">
+            共 {{ episodes.length }} 集
+          </span>
+        </h2>
+        <button class="btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
+          :title="desc ? '当前倒序，点击切换为正序' : '当前正序，点击切换为倒序'" @click="desc = !desc">
+          <span class="i-carbon-switch-layer-2" :class="desc ? 'rotate-180' : ''" />
+          {{ desc ? "倒序" : "正序" }}
+        </button>
+      </div>
       <div class="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
-        <button v-for="ep in episodes" :key="ep.url"
+        <button v-for="ep in sortedEpisodes" :key="ep.url"
           class="px-2 b-none py-2 text-center text-sm rounded-lg truncate transition-all duration-200" :class="ep.url === playId
             ? 'text-white bg-gradient-to-br from-indigo-500 to-violet-500 shadow-[0_8px_22px_-10px_rgba(99,102,241,1)]'
             : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11] hover:text-white'
