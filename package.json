@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite & tsx watch server/main.ts",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview"
   },
