@@ -47,6 +47,7 @@ import {
 import {
   activeRawSites,
   activeSites,
+  cleanPic,
   getActiveSubscriptionId,
   getActiveSubscriptionSource,
   getCachedSubscription,
@@ -522,6 +523,61 @@ function isDirectUrl(u: string): boolean {
   return DIRECT_RE.test(u);
 }
 
+/** 从 HTML 播放页嗅探其中的视频直链（尽力而为：标签 src / JS 变量 / 全页正则） */
+function sniffVideoUrls(html: string, baseUrl: string): string[] {
+  const cands = new Set<string>();
+  const collect = (m: RegExpMatchArray) => {
+    const raw = (m[1] ?? "").replace(/\\\//g, "/").trim();
+    if (!raw) return;
+    try {
+      cands.add(new URL(raw, baseUrl).href);
+    } catch {
+      /* 忽略非法 URL */
+    }
+  };
+  for (const m of html.matchAll(/<video[^>]*?src=["']([^"']+)["']/gi)) collect(m);
+  for (const m of html.matchAll(/<source[^>]*?src=["']([^"']+)["']/gi)) collect(m);
+  // JS 变量（videoUrl/vurl/url/src 等）中常见的视频直链
+  for (const m of html.matchAll(
+    /(?:videoUrl|vurl|video_url|m3u8|mp4|playUrl|play_url|realUrl|url|src)\s*[:=]\s*["']([^"']+)["']/gi,
+  ))
+    collect(m);
+  // 全页直接提取视频后缀链接
+  for (const m of html.matchAll(
+    /https?:\/\/[^"'\s<>]+?\.(?:mp4|m3u8|flv|mkv|avi|ts|mov|mpd|m4a|wmv)(?:[?#][^"'\s<>]*)?/gi,
+  ))
+    collect(m);
+  return [...cands];
+}
+
+/**
+ * 播放地址解析：直链直接返回；否则抓取页面嗅探 HTML 中的视频资源。
+ * 返回 { url: "" } 表示无法解析，由前端用 iframe 兜底播放。
+ */
+async function resolvePlayUrl(url: string): Promise<{ url: string; msg?: string }> {
+  if (isDirectUrl(url)) return { url };
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+        Referer: url,
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return { url: "", msg: `页面请求失败 HTTP ${res.status}` };
+    const ct = res.headers.get("content-type") ?? "";
+    if (ct.startsWith("video/") || ct.includes("octet-stream"))
+      return { url };
+    const html = await res.text();
+    const hit = sniffVideoUrls(html, url).find((u) => isDirectUrl(u));
+    return hit ? { url: hit } : { url: "" };
+  } catch (e) {
+    return { url: "", msg: (e as Error).message };
+  }
+}
+
 interface PlayEpisode {
   /** 剧集名称 */
   name: string;
@@ -902,7 +958,7 @@ class Woshinidie {
           list.push({
             vod_id: String(item.id ?? ""),
             vod_name: String(item.name ?? ""),
-            vod_pic: String(cover.path ?? ""),
+            vod_pic: cleanPic(cover.path ?? ""),
             vod_remarks: String(item.remark ?? ""),
           });
         }
@@ -935,7 +991,7 @@ class Woshinidie {
       .map((b) => ({
         vod_id: String(b.id),
         vod_name: b.name,
-        vod_pic: b.pic,
+        vod_pic: cleanPic(b.pic),
         vod_remarks: b.remark,
       }));
     // 与原实现 h.c(int) 一致：page ≤ 0 时取最大值，其余计数恒为 Integer.MAX_VALUE
@@ -1482,6 +1538,14 @@ const server = http.createServer(async (req, res) => {
       } catch (e) {
         return sendJson(res, 502, { code: 0, msg: (e as Error).message });
       }
+    }
+
+    if (u.pathname === "/api/tvbox/parse") {
+      const url = q.get("url") ?? "";
+      if (!url)
+        return sendJson(res, 400, { code: 0, msg: "缺少 url 参数" });
+      const r = await resolvePlayUrl(url);
+      return sendJson(res, 200, r);
     }
 
     /* ---------- 本地数据接口（不依赖远端初始化，放在 ensureInit 之前） ---------- */

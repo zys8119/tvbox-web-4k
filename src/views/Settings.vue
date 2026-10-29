@@ -40,16 +40,60 @@ const enabledCount = computed(
   () => supported.value.filter((s) => s.enabled).length,
 );
 
-/** 关键词过滤站点名；默认过滤 JVM（type 3）与不支持类型 */
-const hideJvm = ref(true);
+/** 按类型快速过滤（空数组 = 全部类型，支持多选） */
+const typeFilter = ref<number[]>([]);
+/** 订阅中实际存在的站点类型（升序） */
+const siteTypes = computed(() =>
+  [...new Set(supported.value.map((s) => s.type))].sort((a, b) => a - b),
+);
+/** 站点名关键词过滤（空 = 全部；声明见上方 filter） */
 const shown = computed(() => {
   const kw = filter.value.trim().toLowerCase();
-  const base = supported.value.filter(
-    (s) => !hideJvm.value || s.type !== 3,
-  );
+  const base =
+    typeFilter.value.length === 0
+      ? supported.value
+      : supported.value.filter((s) => typeFilter.value.includes(s.type));
   if (!kw) return base;
   return base.filter((s) => s.name.toLowerCase().includes(kw));
 });
+
+/** 自动应用默认选择：配置/订阅变更后启用全部非 type3 站点，type3 默认不启用 */
+async function applyDefaultEnabled() {
+  const all = supported.value;
+  if (!all.length) return;
+  const on = all.filter((s) => s.type !== 3);
+  const off = all.filter((s) => s.type === 3);
+  all.forEach((s) => (s.enabled = s.type !== 3));
+  try {
+    if (on.length) await setTvboxSitesEnabled(on.map((s) => s.key), true);
+    if (off.length) await setTvboxSitesEnabled(off.map((s) => s.key), false);
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
+
+/** 点击类型按钮：支持多选。既过滤展示，又自动只启用已选类型、关闭其它类型 */
+async function toggleTypeFilter(t: number) {
+  const set = new Set(typeFilter.value);
+  if (set.has(t)) {
+    // 取消选中：仅调整过滤视图，不改动站点启用状态
+    set.delete(t);
+    typeFilter.value = [...set];
+    return;
+  }
+  set.add(t);
+  typeFilter.value = [...set];
+  const on = supported.value.filter((s) => set.has(s.type));
+  const off = supported.value.filter((s) => !set.has(s.type));
+  supported.value.forEach((s) => (s.enabled = set.has(s.type)));
+  try {
+    if (on.length) await setTvboxSitesEnabled(on.map((s) => s.key), true);
+    if (off.length) await setTvboxSitesEnabled(off.map((s) => s.key), false);
+  } catch (e) {
+    error.value = (e as Error).message;
+    await load();
+  }
+}
 
 async function load() {
   loading.value = true;
@@ -86,6 +130,7 @@ async function save() {
     tip.value = `${editingId.value ? "订阅已更新" : "订阅已添加"}：${r.counts.sites} 个站点`;
     addUrl(u);
     await load();
+    await applyDefaultEnabled();
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -124,6 +169,7 @@ async function switchSub(s: TvboxSubscription) {
     const r = await switchTvboxSubscription(s.id);
     tip.value = `已切换订阅：${s.name}（${r.counts.sites} 个站点）`;
     await load();
+    await applyDefaultEnabled();
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -157,6 +203,7 @@ async function refresh() {
     const r = await refreshTvbox();
     tip.value = `已刷新：${r.sites} 个站点`;
     await load();
+    await applyDefaultEnabled();
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -318,7 +365,18 @@ onMounted(load);
             {{ enabledCount }}/{{ supported.length }} 已启用
           </span>
         </h3>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-[11px] text-gray-500 mr-1">类型过滤</span>
+          <button v-for="t in siteTypes" :key="t" class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05]"
+            :class="typeFilter.includes(t) ? '!bg-indigo-500/25 !text-indigo-200' : 'hover:bg-white/[0.11]'"
+            @click="toggleTypeFilter(t)">
+            type{{ t }}
+          </button>
+          <button v-if="typeFilter.length" class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
+            @click="typeFilter = []">
+            全部
+          </button>
+          <span class="w-px h-4 bg-white/10 mx-1" />
           <button class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]" @click="toggleAll(true)">
             全开
           </button>
@@ -329,14 +387,8 @@ onMounted(load);
         </div>
       </div>
 
-      <div class="mb-3 flex items-center gap-3">
-        <div class="flex-1">
-          <SearchBox v-model="filter" scope="settings-sites" placeholder="搜索站点名…" />
-        </div>
-        <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none shrink-0">
-          <input type="checkbox" v-model="hideJvm" class="accent-indigo-500 w-3.5 h-3.5 cursor-pointer" />
-          过滤 JVM(type3)
-        </label>
+      <div class="mb-3">
+        <SearchBox v-model="filter" scope="settings-sites" placeholder="搜索站点名…" />
       </div>
 
       <div class="space-y-1.5">

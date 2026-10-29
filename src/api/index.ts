@@ -57,7 +57,7 @@ export interface VodDetail {
   site_key?: string;
   vod_name: string;
   vod_pic: string;
-  vod_actor: string;
+  vod_actor: string | string[];
   vod_director: string;
   vod_tag: string;
   vod_area: string;
@@ -364,6 +364,14 @@ export const fetchTvboxSearch = (wd: string, site?: string) =>
     wd,
     ...(site ? { site } : {}),
   });
+
+/** 播放地址解析 / 嗅探：非视频直链时抓取页面提取 HTML 中的真实视频资源 */
+export interface PlayResolveResult {
+  url: string;
+  msg?: string;
+}
+export const fetchTvboxParse = (url: string) =>
+  getJson<PlayResolveResult>("/api/tvbox/parse", { url });
 
 /** 把后端返回的 header 字符串解析成对象 */
 export function parseHeader(raw?: string): Record<string, string> {

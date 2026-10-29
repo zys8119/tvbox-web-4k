@@ -7,7 +7,12 @@
  *   - type 0  : 仅解析 / 列表（当前订阅中未使用，保留兼容）
  *   - type 3  : csp_* 通过服务端 JVM 桥接执行
  */
-import { getJsonSetting, getSetting, setJsonSetting, setSetting } from "./db.ts";
+import {
+  getJsonSetting,
+  getSetting,
+  setJsonSetting,
+  setSetting,
+} from "./db.ts";
 
 /** 订阅响应需要用 TVBox 客户端的 UA，否则服务端返回 HTML 介绍页 */
 export const TVBOX_UA = "okhttp/3.12.1";
@@ -79,7 +84,9 @@ function now() {
 }
 
 function newId() {
-  return "sub_" + now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
+  return (
+    "sub_" + now().toString(36) + "_" + Math.random().toString(36).slice(2, 8)
+  );
 }
 
 function inferName(url: string): string {
@@ -129,7 +136,10 @@ function migrateLegacy(): void {
   setJsonSetting(SUB_LIST_KEY, [source]);
   setSetting(ACTIVE_ID_KEY, id);
   if (sub) setJsonSetting(subCacheKey(id), sub);
-  const enabled = getJsonSetting<Record<string, boolean>>(LEGACY_ENABLED_KEY, {});
+  const enabled = getJsonSetting<Record<string, boolean>>(
+    LEGACY_ENABLED_KEY,
+    {},
+  );
   if (Object.keys(enabled).length) setJsonSetting(enabledKey(id), enabled);
 }
 
@@ -159,7 +169,9 @@ export function getSubscriptionUrl(): string {
   return getActiveSubscriptionSource()?.url ?? "";
 }
 
-export function getCachedSubscription(id = getActiveSubscriptionId()): Subscription | null {
+export function getCachedSubscription(
+  id = getActiveSubscriptionId(),
+): Subscription | null {
   if (!id) return null;
   return getJsonSetting<Subscription | null>(subCacheKey(id), null);
 }
@@ -224,7 +236,9 @@ export async function setSubscriptionUrl(
   return await refreshSubscription(source.id);
 }
 
-export function getEnabledMap(id = getActiveSubscriptionId()): Record<string, boolean> {
+export function getEnabledMap(
+  id = getActiveSubscriptionId(),
+): Record<string, boolean> {
   if (!id) return {};
   return getJsonSetting<Record<string, boolean>>(enabledKey(id), {});
 }
@@ -249,7 +263,7 @@ export async function refreshSubscription(
   id = getActiveSubscriptionId(),
 ): Promise<Subscription> {
   const source = id
-    ? listSubscriptionSources().find((x) => x.id === id) ?? null
+    ? (listSubscriptionSources().find((x) => x.id === id) ?? null)
     : null;
   const url = source?.url?.trim() ?? "";
   if (!source || !url) throw new Error("尚未设置订阅地址");
@@ -263,6 +277,7 @@ export async function refreshSubscription(
   if (!res.ok) throw new Error("订阅请求失败：HTTP " + res.status);
 
   const text = (await res.text()).trim();
+  console.log(Buffer.from(text, "base64").toString());
   if (!text.startsWith("{") && !text.startsWith("[")) {
     throw new Error(
       "订阅返回的不是 JSON，请确认地址正确（部分站点需 TVBox 客户端 UA）",
@@ -358,7 +373,8 @@ export function setSitesEnabled(
 export function activeSites(sub: Subscription): Site[] {
   const enabled = getEnabledMap();
   return normalizeSites(sub).filter(
-    (s) => s.supported && (enabled[s.key] === undefined ? true : enabled[s.key]),
+    (s) =>
+      s.supported && (enabled[s.key] === undefined ? true : enabled[s.key]),
   );
 }
 
@@ -455,12 +471,22 @@ export async function macHome(api: string) {
   return { class: classes, list: videos };
 }
 
+/** 剥离 TVBox 源在图片地址后附加的 @Referer=xx@User-Agent=xx 参数段 */
+export function cleanPic(raw: unknown): string {
+  const s = String(raw ?? "");
+  const at = s.indexOf("@");
+  if (at <= 0) return s;
+  // 仅当 @ 后是键值参数（如 Referer=/User-Agent=）时剥离，避免误伤普通 URL
+  if (/^@[A-Za-z-]+\s*=/.test(s.slice(at))) return s.slice(0, at);
+  return s;
+}
+
 /** 统一成前端 VodItem 结构 */
 export function toListItem(v: MacCmsItem) {
   return {
     vod_id: String(v.vod_id),
     vod_name: String(v.vod_name ?? ""),
-    vod_pic: String(v.vod_pic ?? ""),
+    vod_pic: cleanPic(v.vod_pic),
     vod_remarks: String(v.vod_remarks ?? ""),
   };
 }
@@ -525,7 +551,7 @@ export async function macDetail(api: string, ids: string) {
   return {
     vod_id: String(v.vod_id),
     vod_name: String(v.vod_name ?? ""),
-    vod_pic: String(v.vod_pic ?? ""),
+    vod_pic: cleanPic(v.vod_pic),
     vod_actor: String(v.vod_actor ?? ""),
     vod_director: String(v.vod_director ?? ""),
     vod_tag: String(v.vod_class ?? ""),

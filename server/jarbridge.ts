@@ -379,11 +379,21 @@ function parsePlayList(playFrom: string, playUrl: string): PlayLine[] {
   return lines;
 }
 
+/** 剥离 TVBox 源在图片地址后附加的 @Referer=xx@User-Agent=xx 参数段 */
+function cleanPic(raw: unknown): string {
+  const s = String(raw ?? "");
+  const at = s.indexOf("@");
+  if (at <= 0) return s;
+  // 仅当 @ 后是键值参数（如 Referer=/User-Agent=）时剥离，避免误伤普通 URL
+  if (/^@[A-Za-z-]+\s*=/.test(s.slice(at))) return s.slice(0, at);
+  return s;
+}
+
 function toListItem(v: Record<string, unknown>): VodItem {
   return {
     vod_id: String(v.vod_id ?? ""),
     vod_name: String(v.vod_name ?? ""),
-    vod_pic: String(v.vod_pic ?? ""),
+    vod_pic: cleanPic(v.vod_pic),
     vod_remarks: String(v.vod_remarks ?? ""),
   };
 }
@@ -458,7 +468,7 @@ export async function jarDetail(
   return {
     vod_id: String(v.vod_id ?? ""),
     vod_name: String(v.vod_name ?? ""),
-    vod_pic: String(v.vod_pic ?? ""),
+    vod_pic: cleanPic(v.vod_pic),
     vod_actor: String(v.vod_actor ?? ""),
     vod_director: String(v.vod_director ?? ""),
     vod_tag: String(v.vod_tag ?? v.type_name ?? v.vod_class ?? ""),

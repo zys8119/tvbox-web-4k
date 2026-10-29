@@ -123,6 +123,19 @@ function pickClass(id: string) {
   router.push({ query: q });
 }
 
+/**
+ * 芯片栏滚轮：内容换行但又有横向溢出（超长单行）时，
+ * 把垂直滚轮转成水平滚动，避免页面跟着乱滚。
+ */
+function onChipWheel(e: WheelEvent) {
+  const el = e.currentTarget as HTMLElement;
+  if (e.shiftKey || Math.abs(e.deltaX) > 0) return;
+  if (el.scrollWidth > el.clientWidth + 1) {
+    el.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }
+}
+
 function changePage(p: number) {
   router.push({
     query: { site: siteKey.value, tid: tid.value, page: String(p) },
@@ -182,8 +195,9 @@ const grouped = computed(() => {
 
     <p v-if="error" class="text-center text-red-400 py-16">{{ error }}</p>
 
-    <!-- 站点选择 -->
-    <div v-if="activeSites.length" class="flex items-center gap-2 overflow-x-auto pb-3 mb-3">
+    <!-- 站点选择：允许换行，最多两行，超出滚动 -->
+    <div v-if="activeSites.length" class="flex flex-wrap items-center gap-2 pb-3 mb-3 max-h-[4.75rem] overflow-y-auto"
+      @wheel="onChipWheel">
       <button v-for="s in activeSites" :key="s.key" class="b-none chip"
         :class="s.key === siteKey ? 'chip-active' : 'chip-idle'" @click="pickSite(s.key)">
         {{ s.name }}
@@ -261,8 +275,9 @@ const grouped = computed(() => {
 
     <!-- 正常浏览 -->
     <template v-else>
-      <!-- 分类 -->
-      <div v-if="classes.length" class="flex items-center gap-2 overflow-x-auto pb-3 mb-4">
+      <!-- 分类：允许换行，最多两行，超出滚动 -->
+      <div v-if="classes.length" class="flex flex-wrap items-center gap-2 pb-3 mb-4 max-h-[4.75rem] overflow-y-auto"
+        @wheel="onChipWheel">
         <button class="b-none chip" :class="!tid ? 'chip-active' : 'chip-idle'" @click="pickClass('')">
           全部
         </button>
