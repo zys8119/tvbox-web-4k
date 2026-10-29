@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Hls from "hls.js";
 import {
@@ -242,7 +242,12 @@ async function attach(url: string) {
   // 重置 iframe 兜底，让 video 元素重新出现
   iframeSrc.value = "";
   await nextTick();
-  const el = video.value;
+  // 双保险：路由过渡（out-in）或 v-if 重建期间 video ref 可能暂未挂载，轮询等待就绪
+  let el = video.value;
+  for (let i = 0; !el && i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 50));
+    el = video.value;
+  }
   if (!el) return;
   destroyHls();
   const isM3u8 = /\.m3u8(\?|$)/i.test(url);
@@ -357,16 +362,22 @@ function onEnded() {
   if (autoPlay.value && nextEp.value) goEp(nextEp.value.url, flag.value);
 }
 
+/** 首次挂载与播放参数变化共用：重置 vodKey 并触发加载 */
+function bootstrap() {
+  vodKey.value = vodId.value;
+  loadAutoPlay();
+  if (vodKey.value) loadMarks();
+  loadPlay();
+  loadEpisodes();
+}
+
+// 首次进入在 onMounted 触发：此时 video 元素已真实挂载（路由 Transition out-in 会推迟 DOM
+// 插入，immediate watch 在 setup 期执行时 video ref 仍为空，导致 src 从未设置）
+onMounted(bootstrap);
+
 watch(
   () => [playId.value, site.value, vodId.value],
-  () => {
-    vodKey.value = vodId.value;
-    loadAutoPlay();
-    if (vodKey.value) loadMarks();
-    loadPlay();
-    loadEpisodes();
-  },
-  { immediate: true },
+  bootstrap,
 );
 
 onBeforeUnmount(() => {

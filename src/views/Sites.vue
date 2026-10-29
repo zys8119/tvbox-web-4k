@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onActivated, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   addSearchHistory,
@@ -50,7 +50,25 @@ const activeSites = computed(() =>
 );
 
 
-onMounted(async () => {
+/** 订阅修订号 Key：Settings 页修改订阅后写入，用于 KeepAlive 缓存失效检测 */
+const REV_KEY = "subs-rev";
+let lastRev = String(localStorage.getItem(REV_KEY) ?? 0);
+
+/**
+ * 加载站点列表并恢复浏览内容。
+ * @param refresh 为 true 时表示订阅刚变化，需清空旧缓存与搜索态后重载
+ */
+async function loadAll(refresh: boolean) {
+  loading.value = true;
+  error.value = "";
+  if (refresh) {
+    searched.value = false;
+    keyword.value = "";
+    searchList.value = [];
+    classes.value = [];
+    list.value = [];
+    pagecount.value = 1;
+  }
   try {
     const data = await fetchTvboxSites();
     sites.value = data.list;
@@ -76,6 +94,16 @@ onMounted(async () => {
   } finally {
     loading.value = false;
   }
+}
+
+onMounted(() => loadAll(false));
+
+/** KeepAlive 命中缓存返回本页时：订阅修订号变化则强制刷新，避免展示旧配置 */
+onActivated(async () => {
+  const rev = String(localStorage.getItem(REV_KEY) ?? 0);
+  if (rev === lastRev) return;
+  lastRev = rev;
+  await loadAll(true);
 });
 
 /** 加载当前站点首页或分类 */

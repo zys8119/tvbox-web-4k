@@ -72,6 +72,15 @@ async function applyDefaultEnabled() {
   }
 }
 
+/** 站点/订阅配置变更标记：Sites 页（KeepAlive 缓存）据此强制刷新，避免展示旧配置 */
+function markSubscriptionChanged() {
+  try {
+    localStorage.setItem("subs-rev", String(Date.now()));
+  } catch {
+    /* localStorage 不可用时忽略 */
+  }
+}
+
 /** 点击类型按钮：支持多选。既过滤展示，又自动只启用已选类型、关闭其它类型 */
 async function toggleTypeFilter(t: number) {
   const set = new Set(typeFilter.value);
@@ -89,6 +98,7 @@ async function toggleTypeFilter(t: number) {
   try {
     if (on.length) await setTvboxSitesEnabled(on.map((s) => s.key), true);
     if (off.length) await setTvboxSitesEnabled(off.map((s) => s.key), false);
+    markSubscriptionChanged();
   } catch (e) {
     error.value = (e as Error).message;
     await load();
@@ -131,6 +141,7 @@ async function save() {
     addUrl(u);
     await load();
     await applyDefaultEnabled();
+    markSubscriptionChanged();
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -170,6 +181,7 @@ async function switchSub(s: TvboxSubscription) {
     tip.value = `已切换订阅：${s.name}（${r.counts.sites} 个站点）`;
     await load();
     await applyDefaultEnabled();
+    markSubscriptionChanged();
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -187,6 +199,7 @@ async function removeSub(s: TvboxSubscription) {
     if (editingId.value === s.id) resetEditor();
     tip.value = `已删除订阅：${s.name}`;
     await load();
+    markSubscriptionChanged();
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -204,6 +217,7 @@ async function refresh() {
     tip.value = `已刷新：${r.sites} 个站点`;
     await load();
     await applyDefaultEnabled();
+    markSubscriptionChanged();
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
@@ -217,6 +231,7 @@ async function toggle(s: TvboxSite) {
   s.enabled = next;
   try {
     await setTvboxSiteEnabled(s.key, next);
+    markSubscriptionChanged();
   } catch (e) {
     s.enabled = !next;
     error.value = (e as Error).message;
@@ -230,6 +245,7 @@ async function toggleAll(on: boolean) {
   supported.value.forEach((s) => (s.enabled = on));
   try {
     await setTvboxSitesEnabled(keys, on);
+    markSubscriptionChanged();
   } catch (e) {
     error.value = (e as Error).message;
     await load();
