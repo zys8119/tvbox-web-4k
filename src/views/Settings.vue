@@ -4,21 +4,28 @@ import {
   fetchTvboxConfig,
   fetchTvboxSites,
   refreshTvbox,
+  removeTvboxSubscription,
   setTvboxSiteEnabled,
   setTvboxSitesEnabled,
   setTvboxSubscription,
+  switchTvboxSubscription,
   type TvboxConfigInfo,
   type TvboxSite,
+  type TvboxSubscription,
 } from "../api";
 import { useSearchHistory } from "../utils/useSearchHistory";
 import SearchBox from "../components/SearchBox.vue";
 
 const cfg = ref<TvboxConfigInfo | null>(null);
 const sites = ref<TvboxSite[]>([]);
+const name = ref("");
 const url = ref("");
+const editingId = ref("");
 const loading = ref(true);
 const saving = ref(false);
 const refreshing = ref(false);
+const switchingId = ref("");
+const removingId = ref("");
 const error = ref("");
 const tip = ref("");
 const filter = ref("");
@@ -50,6 +57,8 @@ async function load() {
       fetchTvboxSites(),
     ]);
     cfg.value = c;
+    editingId.value = c.activeId ?? "";
+    name.value = c.name ?? "";
     url.value = c.url;
     sites.value = s.list;
   } catch (e) {
@@ -70,14 +79,69 @@ async function save() {
   error.value = "";
   tip.value = "";
   try {
-    const r = await setTvboxSubscription(u);
-    tip.value = `订阅已加载：${r.counts.sites} 个站点`;
+    const r = await setTvboxSubscription(u, name.value.trim(), editingId.value);
+    tip.value = `${editingId.value ? "订阅已更新" : "订阅已添加"}：${r.counts.sites} 个站点`;
     addUrl(u);
     await load();
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
     saving.value = false;
+  }
+}
+
+function editSub(s: TvboxSubscription) {
+  editingId.value = s.id;
+  name.value = s.name;
+  url.value = s.url;
+  tip.value = "";
+  error.value = "";
+}
+
+function newSub() {
+  editingId.value = "";
+  name.value = "";
+  url.value = "";
+  tip.value = "";
+  error.value = "";
+}
+
+function resetEditor() {
+  editingId.value = cfg.value?.activeId ?? "";
+  name.value = cfg.value?.name ?? "";
+  url.value = cfg.value?.url ?? "";
+}
+
+async function switchSub(s: TvboxSubscription) {
+  if (s.active) return;
+  switchingId.value = s.id;
+  error.value = "";
+  tip.value = "";
+  try {
+    const r = await switchTvboxSubscription(s.id);
+    tip.value = `已切换订阅：${s.name}（${r.counts.sites} 个站点）`;
+    await load();
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    switchingId.value = "";
+  }
+}
+
+async function removeSub(s: TvboxSubscription) {
+  if (!window.confirm(`确定删除订阅「${s.name}」吗？`)) return;
+  removingId.value = s.id;
+  error.value = "";
+  tip.value = "";
+  try {
+    await removeTvboxSubscription(s.id);
+    if (editingId.value === s.id) resetEditor();
+    tip.value = `已删除订阅：${s.name}`;
+    await load();
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    removingId.value = "";
   }
 }
 
@@ -139,16 +203,92 @@ onMounted(load);
     <section class="panel mb-5">
       <h3 class="text-sm font-medium text-gray-200 mb-1">订阅地址</h3>
       <p class="text-[11px] text-gray-500 mb-3">
-        填写 TVBox 订阅地址（JSON 配置），保存后由服务端拉取并解析。
+        支持保存多个 TVBox 订阅地址，当前激活项会用于站点列表、搜索与浏览。
       </p>
 
-      <div class="flex flex-col sm:flex-row gap-2">
+      <div v-if="cfg?.subscriptions?.length" class="mb-4 space-y-2">
+        <div
+          v-for="s in cfg.subscriptions"
+          :key="s.id"
+          class="rounded-xl bg-white/[0.04] px-3 py-3"
+        >
+          <div class="flex items-start gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-sm text-gray-100">{{ s.name }}</span>
+                <span
+                  v-if="s.active"
+                  class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300"
+                >
+                  当前
+                </span>
+                <span
+                  v-else-if="s.cached"
+                  class="text-[10px] px-2 py-0.5 rounded-md bg-white/[0.06] text-gray-400"
+                >
+                  已缓存
+                </span>
+              </div>
+              <p class="mt-1 text-[11px] text-gray-500 break-all">{{ s.url }}</p>
+              <p class="mt-1 text-[11px] text-gray-600">
+                {{ s.counts.sites }} 站点 · {{ s.counts.lives }} 直播 · {{ s.counts.parses }} 解析
+              </p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button
+                class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
+                :disabled="switchingId === s.id || s.active"
+                @click="switchSub(s)"
+              >
+                {{ switchingId === s.id ? "切换中" : s.active ? "当前订阅" : "切换" }}
+              </button>
+              <button
+                class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
+                @click="editSub(s)"
+              >
+                编辑
+              </button>
+              <button
+                class="b-none btn text-xs px-2.5 py-1 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                :disabled="removingId === s.id"
+                @click="removeSub(s)"
+              >
+                {{ removingId === s.id ? "删除中" : "删除" }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-[220px_minmax(0,1fr)] gap-2 mb-2">
+        <input
+          v-model="name"
+          type="text"
+          class="h-10 rounded-xl px-3 text-sm bg-white/[0.05] text-gray-100 placeholder:text-gray-500 border-0 outline-none ring-0 focus:outline-none focus:ring-0 focus:bg-white/[0.09] transition-colors"
+          placeholder="订阅名称（可选）"
+        />
         <input v-model="url" type="text"
           class="flex-1 h-10 rounded-xl px-3 text-sm bg-white/[0.05] text-gray-100 placeholder:text-gray-500 border-0 outline-none ring-0 focus:outline-none focus:ring-0 focus:bg-white/[0.09] transition-colors"
           placeholder="https://api.tvbox.xin/" @keyup.enter="save" />
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-2">
         <button class="b-none btn btn-primary text-sm px-4 h-10 shrink-0" :disabled="saving" @click="save">
           <span v-if="saving" class="i-carbon-circle-dash animate-spin" />
-          {{ saving ? "加载中" : "保存并加载" }}
+          {{ saving ? "加载中" : editingId ? "保存并切换" : "新增并加载" }}
+        </button>
+        <button
+          class="b-none btn text-sm px-3 h-10 shrink-0 bg-white/[0.05] hover:bg-white/[0.11]"
+          @click="newSub"
+        >
+          新建订阅
+        </button>
+        <button
+          class="b-none btn text-sm px-3 h-10 shrink-0 bg-white/[0.05] hover:bg-white/[0.11]"
+          :disabled="!cfg?.activeId"
+          @click="resetEditor"
+        >
+          回到当前订阅
         </button>
         <button class="b-none btn text-sm px-3 h-10 shrink-0 bg-white/[0.05] hover:bg-white/[0.11]"
           :disabled="refreshing || !cfg?.cached" @click="refresh">
@@ -246,7 +386,7 @@ onMounted(load);
         </span>
       </h3>
       <p class="text-[11px] text-gray-500 mb-3">
-        以下站点依赖 Android JAR（csp_* 爬虫）运行，浏览器环境无法执行，故不参与搜索与浏览。
+        以下站点仍未被当前服务端适配，因此不会参与搜索与浏览。
       </p>
       <div class="flex flex-wrap gap-1.5">
         <span v-for="s in unsupported" :key="s.key"

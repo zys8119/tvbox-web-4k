@@ -246,7 +246,21 @@ export const saveMarksApi = (o: {
 /* ============================== TVBox 订阅 ============================== */
 
 export interface TvboxConfigInfo {
+  activeId: string;
   url: string;
+  name: string;
+  cached: boolean;
+  fetchedAt: number;
+  spider: string;
+  counts: { sites: number; lives: number; parses: number; flags: number };
+  subscriptions: TvboxSubscription[];
+}
+
+export interface TvboxSubscription {
+  id: string;
+  name: string;
+  url: string;
+  active: boolean;
   cached: boolean;
   fetchedAt: number;
   spider: string;
@@ -274,12 +288,27 @@ export interface AggregatedItem extends VodItem {
 export const fetchTvboxConfig = () =>
   getJson<TvboxConfigInfo>("/api/tvbox/config");
 
-/** 设置订阅地址并立即拉取 */
-export const setTvboxSubscription = (url: string) =>
+/** 新增或更新订阅地址并立即拉取，同时切换为当前激活项 */
+export const setTvboxSubscription = (url: string, name = "", id = "") =>
   sendJson<{
     ok: boolean;
+    activeId: string;
     counts: { sites: number; lives: number; parses: number };
-  }>("/api/tvbox/config", "POST", { url });
+  }>("/api/tvbox/config", "POST", { url, name, id });
+
+/** 切换当前订阅 */
+export const switchTvboxSubscription = (id: string) =>
+  sendJson<{
+    ok: boolean;
+    activeId: string;
+    counts: { sites: number; lives: number; parses: number; flags: number };
+  }>("/api/tvbox/config/active", "POST", { id });
+
+/** 删除保存的订阅 */
+export const removeTvboxSubscription = (id: string) =>
+  sendJson<{ ok: boolean; activeId: string }>("/api/tvbox/config/remove", "POST", {
+    id,
+  });
 
 /** 重新拉取订阅 */
 export const refreshTvbox = () =>

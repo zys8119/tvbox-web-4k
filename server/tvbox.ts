@@ -52,24 +52,181 @@ export interface Subscription {
   source: string;
 }
 
-const SUB_KEY = "tvbox.subscription";
-const URL_KEY = "tvbox.url";
-/** 站点启用状态：{ [siteKey]: boolean } */
-const ENABLED_KEY = "tvbox.enabled";
+export interface SubscriptionSource {
+  id: string;
+  name: string;
+  url: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+const SUB_LIST_KEY = "tvbox.subscriptions";
+const ACTIVE_ID_KEY = "tvbox.active";
+const LEGACY_SUB_KEY = "tvbox.subscription";
+const LEGACY_URL_KEY = "tvbox.url";
+const LEGACY_ENABLED_KEY = "tvbox.enabled";
+
+function subCacheKey(id: string) {
+  return "tvbox.subscription." + id;
+}
+
+function enabledKey(id: string) {
+  return "tvbox.enabled." + id;
+}
+
+function now() {
+  return Date.now();
+}
+
+function newId() {
+  return "sub_" + now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
+}
+
+function inferName(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.hostname || url;
+  } catch {
+    return url;
+  }
+}
+
+function normalizeSources(raw: unknown): SubscriptionSource[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((it) => {
+      const row = it as Record<string, unknown>;
+      const url = String(row.url ?? "").trim();
+      if (!url) return null;
+      const id = String(row.id ?? "").trim() || newId();
+      return {
+        id,
+        name: String(row.name ?? "").trim() || inferName(url),
+        url,
+        createdAt: Number(row.createdAt ?? 0) || now(),
+        updatedAt: Number(row.updatedAt ?? 0) || now(),
+      } satisfies SubscriptionSource;
+    })
+    .filter(Boolean) as SubscriptionSource[];
+}
+
+function migrateLegacy(): void {
+  const hasList = getJsonSetting<unknown[]>(SUB_LIST_KEY, []);
+  if (Array.isArray(hasList) && hasList.length) return;
+
+  const url = getSetting(LEGACY_URL_KEY, "").trim();
+  const sub = getJsonSetting<Subscription | null>(LEGACY_SUB_KEY, null);
+  if (!url && !sub) return;
+
+  const id = newId();
+  const source: SubscriptionSource = {
+    id,
+    name: inferName(url || sub?.source || "默认订阅"),
+    url: url || sub?.source || "",
+    createdAt: now(),
+    updatedAt: now(),
+  };
+  setJsonSetting(SUB_LIST_KEY, [source]);
+  setSetting(ACTIVE_ID_KEY, id);
+  if (sub) setJsonSetting(subCacheKey(id), sub);
+  const enabled = getJsonSetting<Record<string, boolean>>(LEGACY_ENABLED_KEY, {});
+  if (Object.keys(enabled).length) setJsonSetting(enabledKey(id), enabled);
+}
 
 /* ============================== 订阅管理 ============================== */
 
+export function listSubscriptionSources(): SubscriptionSource[] {
+  migrateLegacy();
+  return normalizeSources(getJsonSetting<unknown[]>(SUB_LIST_KEY, [])).sort(
+    (a, b) => b.updatedAt - a.updatedAt,
+  );
+}
+
+export function getActiveSubscriptionId(): string {
+  migrateLegacy();
+  const id = getSetting(ACTIVE_ID_KEY, "");
+  if (id) return id;
+  const first = listSubscriptionSources()[0];
+  return first?.id ?? "";
+}
+
+export function getActiveSubscriptionSource(): SubscriptionSource | null {
+  const id = getActiveSubscriptionId();
+  return listSubscriptionSources().find((x) => x.id === id) ?? null;
+}
+
 export function getSubscriptionUrl(): string {
-  return getSetting(URL_KEY, "");
+  return getActiveSubscriptionSource()?.url ?? "";
 }
 
-export async function setSubscriptionUrl(url: string): Promise<Subscription> {
-  setSetting(URL_KEY, url.trim());
-  return await refreshSubscription();
+export function getCachedSubscription(id = getActiveSubscriptionId()): Subscription | null {
+  if (!id) return null;
+  return getJsonSetting<Subscription | null>(subCacheKey(id), null);
 }
 
-export function getCachedSubscription(): Subscription | null {
-  return getJsonSetting<Subscription | null>(SUB_KEY, null);
+export function saveSubscriptionSource(input: {
+  url: string;
+  name?: string;
+  id?: string;
+}): SubscriptionSource {
+  const url = input.url.trim();
+  if (!url) throw new Error("缺少订阅地址");
+  const list = listSubscriptionSources();
+  const stamp = now();
+  const current = input.id ? list.find((x) => x.id === input.id) : undefined;
+  const source: SubscriptionSource = current
+    ? {
+        ...current,
+        name: input.name?.trim() || current.name || inferName(url),
+        url,
+        updatedAt: stamp,
+      }
+    : {
+        id: newId(),
+        name: input.name?.trim() || inferName(url),
+        url,
+        createdAt: stamp,
+        updatedAt: stamp,
+      };
+  const next = current
+    ? list.map((x) => (x.id === current.id ? source : x))
+    : [source, ...list];
+  setJsonSetting(SUB_LIST_KEY, next);
+  setSetting(ACTIVE_ID_KEY, source.id);
+  return source;
+}
+
+export function setActiveSubscription(id: string): SubscriptionSource {
+  const list = listSubscriptionSources();
+  const source = list.find((x) => x.id === id);
+  if (!source) throw new Error("订阅不存在");
+  setSetting(ACTIVE_ID_KEY, source.id);
+  return source;
+}
+
+export function removeSubscription(id: string): void {
+  const list = listSubscriptionSources();
+  const next = list.filter((x) => x.id !== id);
+  if (next.length === list.length) throw new Error("订阅不存在");
+  setJsonSetting(SUB_LIST_KEY, next);
+  const active = getActiveSubscriptionId();
+  if (active === id) {
+    setSetting(ACTIVE_ID_KEY, next[0]?.id ?? "");
+  }
+}
+
+export async function setSubscriptionUrl(
+  url: string,
+  name?: string,
+  id?: string,
+): Promise<Subscription> {
+  const source = saveSubscriptionSource({ url, name, id });
+  return await refreshSubscription(source.id);
+}
+
+export function getEnabledMap(id = getActiveSubscriptionId()): Record<string, boolean> {
+  if (!id) return {};
+  return getJsonSetting<Record<string, boolean>>(enabledKey(id), {});
 }
 
 /** 带超时的 fetch */
@@ -88,9 +245,14 @@ async function fetchWithTimeout(
 }
 
 /** 拉取并解析订阅 */
-export async function refreshSubscription(): Promise<Subscription> {
-  const url = getSubscriptionUrl();
-  if (!url) throw new Error("尚未设置订阅地址");
+export async function refreshSubscription(
+  id = getActiveSubscriptionId(),
+): Promise<Subscription> {
+  const source = id
+    ? listSubscriptionSources().find((x) => x.id === id) ?? null
+    : null;
+  const url = source?.url?.trim() ?? "";
+  if (!source || !url) throw new Error("尚未设置订阅地址");
 
   const res = await fetchWithTimeout(url, {
     headers: {
@@ -124,7 +286,7 @@ export async function refreshSubscription(): Promise<Subscription> {
     source: url,
   };
 
-  setJsonSetting(SUB_KEY, sub);
+  setJsonSetting(subCacheKey(source.id), sub);
   return sub;
 }
 
@@ -170,23 +332,26 @@ export function normalizeSites(sub: Subscription): Site[] {
   });
 }
 
-/** 读取站点启用状态 */
-export function getEnabledMap(): Record<string, boolean> {
-  return getJsonSetting<Record<string, boolean>>(ENABLED_KEY, {});
-}
-
 /** 设置某站点是否启用 */
-export function setSiteEnabled(key: string, enabled: boolean): void {
-  const map = getEnabledMap();
+export function setSiteEnabled(
+  key: string,
+  enabled: boolean,
+  id = getActiveSubscriptionId(),
+): void {
+  const map = getEnabledMap(id);
   map[key] = enabled;
-  setJsonSetting(ENABLED_KEY, map);
+  if (id) setJsonSetting(enabledKey(id), map);
 }
 
 /** 批量设置站点启用状态 */
-export function setSitesEnabled(keys: string[], enabled: boolean): void {
-  const map = getEnabledMap();
+export function setSitesEnabled(
+  keys: string[],
+  enabled: boolean,
+  id = getActiveSubscriptionId(),
+): void {
+  const map = getEnabledMap(id);
   for (const k of keys) map[k] = enabled;
-  setJsonSetting(ENABLED_KEY, map);
+  if (id) setJsonSetting(enabledKey(id), map);
 }
 
 /** 只返回已启用且可代理的站点 */

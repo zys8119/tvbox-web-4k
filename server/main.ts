@@ -47,15 +47,19 @@ import {
 import {
   activeRawSites,
   activeSites,
+  getActiveSubscriptionId,
+  getActiveSubscriptionSource,
   getCachedSubscription,
   getEnabledMap,
-  getSubscriptionUrl,
+  listSubscriptionSources,
   macCategory,
   macDetail,
   macHome,
   macSearch,
   normalizeSites,
   refreshSubscription,
+  removeSubscription,
+  setActiveSubscription,
   setSiteEnabled,
   setSitesEnabled,
   setSubscriptionUrl,
@@ -1048,12 +1052,36 @@ const server = http.createServer(async (req, res) => {
 
     if (u.pathname === "/api/tvbox/config") {
       if (req.method === "GET") {
-        const sub = getCachedSubscription();
+        const activeId = getActiveSubscriptionId();
+        const current = getActiveSubscriptionSource();
+        const sub = getCachedSubscription(activeId);
         return sendJson(res, 200, {
-          url: getSubscriptionUrl(),
+          activeId,
+          url: current?.url ?? "",
+          name: current?.name ?? "",
           cached: !!sub,
           fetchedAt: sub?.fetchedAt ?? 0,
           spider: sub?.spider ?? "",
+          subscriptions: listSubscriptionSources().map((x) => {
+            const cached = getCachedSubscription(x.id);
+            return {
+              id: x.id,
+              name: x.name,
+              url: x.url,
+              active: x.id === activeId,
+              cached: !!cached,
+              fetchedAt: cached?.fetchedAt ?? 0,
+              spider: cached?.spider ?? "",
+              counts: cached
+                ? {
+                    sites: cached.sites.length,
+                    lives: cached.lives.length,
+                    parses: cached.parses.length,
+                    flags: cached.flags.length,
+                  }
+                : { sites: 0, lives: 0, parses: 0, flags: 0 },
+            };
+          }),
           counts: sub
             ? {
                 sites: sub.sites.length,
@@ -1067,11 +1095,15 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "POST") {
         const b = await readJsonBody(req);
         const url = str(b.url).trim();
+        const name = str(b.name).trim();
+        const id = str(b.id).trim();
         if (!url) return sendJson(res, 400, { code: 0, msg: "缺少订阅地址" });
         try {
-          const sub = await setSubscriptionUrl(url);
+          const sub = await setSubscriptionUrl(url, name, id || undefined);
+          const current = getActiveSubscriptionSource();
           return sendJson(res, 200, {
             ok: true,
+            activeId: current?.id ?? "",
             counts: {
               sites: sub.sites.length,
               lives: sub.lives.length,
@@ -1083,6 +1115,48 @@ const server = http.createServer(async (req, res) => {
         }
       }
       return sendJson(res, 405, { code: 0, msg: "method not allowed" });
+    }
+
+    if (u.pathname === "/api/tvbox/config/active") {
+      if (req.method !== "POST")
+        return sendJson(res, 405, { code: 0, msg: "method not allowed" });
+      const b = await readJsonBody(req);
+      const id = str(b.id).trim();
+      if (!id) return sendJson(res, 400, { code: 0, msg: "缺少订阅 id" });
+      try {
+        const source = setActiveSubscription(id);
+        let sub = getCachedSubscription(source.id);
+        if (!sub) sub = await refreshSubscription(source.id);
+        return sendJson(res, 200, {
+          ok: true,
+          activeId: source.id,
+          counts: {
+            sites: sub.sites.length,
+            lives: sub.lives.length,
+            parses: sub.parses.length,
+            flags: sub.flags.length,
+          },
+        });
+      } catch (e) {
+        return sendJson(res, 400, { code: 0, msg: (e as Error).message });
+      }
+    }
+
+    if (u.pathname === "/api/tvbox/config/remove") {
+      if (req.method !== "POST")
+        return sendJson(res, 405, { code: 0, msg: "method not allowed" });
+      const b = await readJsonBody(req);
+      const id = str(b.id).trim();
+      if (!id) return sendJson(res, 400, { code: 0, msg: "缺少订阅 id" });
+      try {
+        removeSubscription(id);
+        return sendJson(res, 200, {
+          ok: true,
+          activeId: getActiveSubscriptionId(),
+        });
+      } catch (e) {
+        return sendJson(res, 400, { code: 0, msg: (e as Error).message });
+      }
     }
 
     if (u.pathname === "/api/tvbox/refresh") {

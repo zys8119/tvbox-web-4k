@@ -1,9 +1,11 @@
 import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import {
   spawn,
   spawnSync,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import readline from "node:readline";
 import type { RawSite } from "./tvbox.ts";
@@ -53,6 +55,7 @@ const BRIDGE_DIR = path.resolve(process.cwd(), "server/jarbridge");
 const BUILD_DIR = path.join(BRIDGE_DIR, "build/classes");
 const BRIDGE_CLASS = path.join(BUILD_DIR, "bridge/Bridge.class");
 const LIB_DIR = path.join(BRIDGE_DIR, "lib");
+const CACHE_DIR = path.join(BRIDGE_DIR, ".cache");
 const JAVA_FLAGS = [
   "-XX:+UnlockDiagnosticVMOptions",
   "-XX:-BytecodeVerificationRemote",
@@ -60,12 +63,17 @@ const JAVA_FLAGS = [
 ];
 const REQUEST_TIMEOUT_MS = 60000;
 const DIRECT_RE = /^.*\.(mp4|m3u8|flv|mkv|avi|ts|mov|mpd|m4a|wmv)(\?.*)?$/i;
-
-let proc: ChildProcessWithoutNullStreams | null = null;
-let pending = new Map<string, Pending>();
-let seq = 0;
 let compileChecked = false;
-let stderrTail = "";
+
+type ProcState = {
+  proc: ChildProcessWithoutNullStreams;
+  pending: Map<string, Pending>;
+  seq: number;
+  stderrTail: string;
+  key: string;
+};
+
+const procPool = new Map<string, ProcState>();
 
 function pickExecutable(kind: "java" | "javac", fallback: string): string {
   const envBin = process.env[kind === "java" ? "JAVA_BIN" : "JAVAC_BIN"];
@@ -79,10 +87,9 @@ function pickExecutable(kind: "java" | "javac", fallback: string): string {
   return fallback;
 }
 
-function classpath(): string {
+function runtimeClasspath(): string[] {
   return [
     BUILD_DIR,
-    path.join(LIB_DIR, "new-jvm.jar"),
     path.join(LIB_DIR, "gson.jar"),
     path.join(LIB_DIR, "okhttp.jar"),
     path.join(LIB_DIR, "okio.jar"),
@@ -90,6 +97,14 @@ function classpath(): string {
     path.join(LIB_DIR, "protobuf.jar"),
     path.join(LIB_DIR, "slf4j-api.jar"),
     path.join(LIB_DIR, "slf4j-simple.jar"),
+  ];
+}
+
+function classpath(spiderJar?: string | null): string {
+  return [
+    BUILD_DIR,
+    spiderJar || path.join(LIB_DIR, "new-jvm.jar"),
+    ...runtimeClasspath().slice(1),
   ].join(":");
 }
 
@@ -116,21 +131,25 @@ function ensureCompiled(): void {
   compileChecked = true;
 }
 
-function startProcess(): ChildProcessWithoutNullStreams {
+function startProcess(spiderJar?: string | null): ProcState {
   ensureCompiled();
   const java = pickExecutable("java", "java");
-  const child = spawn(
-    java,
-    [...JAVA_FLAGS, "-cp", classpath(), "bridge.Bridge"],
-    {
-      cwd: BRIDGE_DIR,
-      stdio: ["pipe", "pipe", "pipe"],
-    },
-  );
+  const key = classpath(spiderJar);
+  const child = spawn(java, [...JAVA_FLAGS, "-cp", key, "bridge.Bridge"], {
+    cwd: BRIDGE_DIR,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const state: ProcState = {
+    proc: child,
+    pending: new Map(),
+    seq: 0,
+    stderrTail: "",
+    key,
+  };
   child.stdin.setDefaultEncoding("utf8");
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk: string) => {
-    stderrTail = (stderrTail + chunk).slice(-8000);
+    state.stderrTail = (state.stderrTail + chunk).slice(-8000);
   });
   const rl = readline.createInterface({ input: child.stdout });
   rl.on("line", (line) => {
@@ -140,31 +159,33 @@ function startProcess(): ChildProcessWithoutNullStreams {
     } catch {
       return;
     }
-    const task = pending.get(msg.id);
+    const task = state.pending.get(msg.id);
     if (!task) return;
-    pending.delete(msg.id);
+    state.pending.delete(msg.id);
     clearTimeout(task.timer);
     if (msg.ok) task.resolve(msg.result ?? null);
     else task.reject(new Error(msg.error || "jarbridge 调用失败"));
   });
   child.on("exit", (code, signal) => {
     const err = new Error(
-      `jarbridge 进程退出: ${signal ?? code ?? "unknown"}${stderrTail ? `\n${stderrTail.trim()}` : ""}`,
+      `jarbridge 进程退出: ${signal ?? code ?? "unknown"}${state.stderrTail ? `\n${state.stderrTail.trim()}` : ""}`,
     );
-    for (const [, task] of pending) {
+    for (const [, task] of state.pending) {
       clearTimeout(task.timer);
       task.reject(err);
     }
-    pending.clear();
-    proc = null;
+    state.pending.clear();
+    procPool.delete(state.key);
   });
-  return child;
+  procPool.set(key, state);
+  return state;
 }
 
-function ensureProcess(): ChildProcessWithoutNullStreams {
-  if (proc && !proc.killed && proc.exitCode === null) return proc;
-  proc = startProcess();
-  return proc;
+function ensureProcess(spiderJar?: string | null): ProcState {
+  const key = classpath(spiderJar);
+  const state = procPool.get(key);
+  if (state && !state.proc.killed && state.proc.exitCode === null) return state;
+  return startProcess(spiderJar);
 }
 
 function spiderClassName(api: string): string {
@@ -181,24 +202,120 @@ function siteExtend(site: RawSite): string {
   return JSON.stringify(site.ext);
 }
 
+function siteJarUrl(site: RawSite): string {
+  const raw = typeof site.jar === "string" ? site.jar : "";
+  const url = raw.split(";")[0]?.trim() ?? "";
+  return /^https?:\/\//i.test(url) ? url : "";
+}
+
+function siteJarKey(site: RawSite): string {
+  const url = siteJarUrl(site);
+  return createHash("sha1")
+    .update(`${site.api || ""}\n${url}`)
+    .digest("hex");
+}
+
+function listJarClasses(jarPath: string): string[] {
+  const javaJar = pickExecutable("java", "/opt/homebrew/opt/openjdk/bin/jar");
+  const ret = spawnSync(javaJar.replace(/\/java$/, "/jar"), ["tf", jarPath], {
+    cwd: BRIDGE_DIR,
+    encoding: "utf8",
+  });
+  if (ret.status !== 0) return [];
+  return ret.stdout
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function hasDexNative(jarPath: string): boolean {
+  return listJarClasses(jarPath).includes(
+    "com/github/catvod/spider/DexNative.class",
+  );
+}
+
+async function ensureExternalJar(site: RawSite): Promise<string | null> {
+  const url = siteJarUrl(site);
+  if (!url) return null;
+  const key = siteJarKey(site);
+  const dir = path.join(CACHE_DIR, key);
+  const sourceJar = path.join(dir, "source.jar");
+  const vmJar = path.join(dir, "runtime.jar");
+  await mkdir(dir, { recursive: true });
+
+  if (!existsSync(sourceJar)) {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "okhttp/3.12.1", Accept: "*/*" },
+    });
+    if (!res.ok) throw new Error(`下载站点 jar 失败：HTTP ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    await writeFile(sourceJar, buf);
+  }
+
+  if (existsSync(vmJar)) {
+    if (hasDexNative(vmJar)) {
+      throw new Error("该站点依赖 Android Native(DexNative/.so)，当前服务端 JVM 无法执行");
+    }
+    return vmJar;
+  }
+
+  const entries = listJarClasses(sourceJar);
+  const hasDex = entries.includes("classes.dex");
+  const hasClass = entries.some((x) => x.endsWith(".class"));
+
+  if (hasClass && !hasDex) {
+    await writeFile(vmJar, await readFile(sourceJar));
+    if (hasDexNative(vmJar)) {
+      throw new Error(
+        "该站点依赖 Android Native(DexNative/.so)，当前服务端 JVM 无法执行",
+      );
+    }
+    return vmJar;
+  }
+
+  if (!hasDex) {
+    throw new Error("站点 jar 既不含 .class 也不含 classes.dex");
+  }
+
+  const d2j = pickExecutable("java", "java").replace(/\/java$/, "/d2j-dex2jar");
+  const dex2jar = existsSync(d2j) ? d2j : "d2j-dex2jar";
+  const ret = spawnSync(dex2jar, ["-f", "-o", vmJar, sourceJar], {
+    cwd: BRIDGE_DIR,
+    encoding: "utf8",
+  });
+  if (ret.status !== 0 || !existsSync(vmJar)) {
+    throw new Error(
+      "dex2jar 转换失败: " +
+        (ret.stderr?.trim() || ret.stdout?.trim() || `exit ${ret.status}`),
+    );
+  }
+  if (hasDexNative(vmJar)) {
+    throw new Error(
+      "该站点依赖 Android Native(DexNative/.so)，当前服务端 JVM 无法执行",
+    );
+  }
+  return vmJar;
+}
+
 async function invokeSpider(
   site: RawSite,
   method: string,
   args: JsonValue[],
 ): Promise<string | null> {
-  const child = ensureProcess();
-  const id = String(++seq);
+  const extraJar = await ensureExternalJar(site);
+  const state = ensureProcess(extraJar);
+  const id = String(++state.seq);
   return await new Promise<string | null>((resolve, reject) => {
     const timer = setTimeout(() => {
-      pending.delete(id);
+      state.pending.delete(id);
       reject(
         new Error(
-          `jarbridge 调用超时: ${site.key}/${method}${stderrTail ? `\n${stderrTail.trim()}` : ""}`,
+          `jarbridge 调用超时: ${site.key}/${method}${state.stderrTail ? `\n${state.stderrTail.trim()}` : ""}`,
         ),
       );
     }, REQUEST_TIMEOUT_MS);
-    pending.set(id, { resolve, reject, timer });
-    child.stdin.write(
+    state.pending.set(id, { resolve, reject, timer });
+    state.proc.stdin.write(
       JSON.stringify({
         id,
         class: spiderClassName(site.api || ""),
