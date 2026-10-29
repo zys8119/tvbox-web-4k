@@ -1,7 +1,4 @@
 packages:
   - "."
 
-allowBuilds:
-  esbuild: true
-
 dangerouslyAllowAllBuilds: true

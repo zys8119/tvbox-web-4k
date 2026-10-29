@@ -3,7 +3,7 @@ COPY . /app
 WORKDIR /app
 RUN npm i pnpm -g
 # 允许所有依赖执行构建脚本
-RUN printf "dangerouslyAllowAllBuilds: true\n" > pnpm-workspace.yaml
+RUN printf "packages:\n  - \".\"\ndangerouslyAllowAllBuilds: true" > pnpm-workspace.yaml
 # RUN pnpm approve-builds
 RUN pnpm i
 EXPOSE 5173
