@@ -234,7 +234,7 @@ const grouped = computed(() => {
           <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 md:gap-4">
             <RouterLink v-for="it in g.items" :key="g.key + '-' + it.vod_id" :to="{
               name: 'site-detail',
-              query: { site: g.key, id: it.vod_id },
+              query: { site: g.key, id: it.vod_id, name: it.vod_name },
             }" class="group card glass-hover hover:-translate-y-1.5 duration-300 ease-out">
               <div class="relative aspect-[3/4] overflow-hidden bg-white/5">
                 <img v-if="it.vod_pic" :src="it.vod_pic" :alt="it.vod_name" loading="lazy"

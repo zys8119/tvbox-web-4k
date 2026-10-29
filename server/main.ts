@@ -64,6 +64,7 @@ import {
   setSitesEnabled,
   setSubscriptionUrl,
   type Site,
+  type Subscription,
 } from "./tvbox.ts";
 import { jarCategory, jarDetail, jarHome, jarSearch } from "./jarbridge.ts";
 import { siteCacheKey, withSiteCache } from "./cache.ts";
@@ -104,6 +105,80 @@ function siteSig(
   const api = String(raw?.api ?? site?.api ?? "");
   const jar = String(raw?.jar ?? "").split(";")[0] ?? "";
   return api + "|" + jar;
+}
+
+/**
+ * 站点详情兜底：主站无法解析详情时（如 csp_Douban 没有 detailContent），
+ * 用片名在其它已启用站点聚合搜索，优先取片名完全一致的命中并解析其详情。
+ */
+async function detailViaAggregateSearch(
+  sub: Subscription,
+  excludeKey: string,
+  name: string,
+): Promise<{ detail: Record<string, unknown>; siteKey: string } | null> {
+  const want = name.trim();
+  if (!want) return null;
+  const sites = activeSites(sub).filter((x) => x.key !== excludeKey);
+  if (!sites.length) return null;
+  const rawMap = new Map(
+    activeRawSites(sub).map((s) => [String(s.key ?? ""), s] as const),
+  );
+  const matches: Array<{
+    site: Site;
+    item: { vod_id: string; vod_name: string };
+  }> = [];
+  // 与聚合搜索相同：并发上限 8，逐批次搜索全部启用的其它站点
+  const limit = 8;
+  for (let i = 0; i < sites.length; i += limit) {
+    const batch = sites.slice(i, i + limit);
+    const settled = await Promise.allSettled(
+      batch.map(async (s) => ({
+        site: s,
+        list:
+          s.type === 3 && rawMap.get(s.key)
+            ? await jarSearch(rawMap.get(s.key)!, want)
+            : await macSearch(s.api, want),
+      })),
+    );
+    for (const r of settled) {
+      if (r.status !== "fulfilled") continue;
+      for (const it of r.value.list.slice(0, 5)) {
+        matches.push({
+          site: r.value.site,
+          item: {
+            vod_id: String(it.vod_id ?? ""),
+            vod_name: String(it.vod_name ?? ""),
+          },
+        });
+      }
+    }
+  }
+  if (!matches.length) return null;
+  // 片名完全一致的命中优先
+  matches.sort((a, b) => {
+    const ea = a.item.vod_name.trim() === want ? 0 : 1;
+    const eb = b.item.vod_name.trim() === want ? 0 : 1;
+    return ea - eb;
+  });
+  const tried = new Set<string>();
+  for (const { site, item } of matches.slice(0, 5)) {
+    const dedupe = `${site.key}:${item.vod_id}`;
+    if (tried.has(dedupe)) continue;
+    tried.add(dedupe);
+    try {
+      const raw = rawMap.get(site.key);
+      const d =
+        site.type === 3 && raw
+          ? await jarDetail(raw, item.vod_id)
+          : await macDetail(site.api, item.vod_id);
+      if (d && (d.vod_play_list as unknown[] | undefined)?.length) {
+        return { detail: d, siteKey: site.key };
+      }
+    } catch {
+      // 该站详情不可用，继续尝试下一个
+    }
+  }
+  return null;
 }
 
 /* ============================== 加密工具 ============================== */
@@ -1309,18 +1384,29 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 404, { code: 0, msg: "站点不存在或未启用" });
       const subId = getActiveSubscriptionId();
       const id = q.get("id") ?? "";
+      const name = q.get("name") ?? "";
       const cacheKey = siteCacheKey(subId, key, "detail", {
         sig: siteSig(site, rawSite),
         id,
+        name,
       });
       try {
         const d = await withSiteCache(
           cacheKey,
           TTL.detail,
-          () =>
-            site.type === 3 && rawSite
-              ? jarDetail(rawSite, id)
-              : macDetail(site.api, id),
+          async (): Promise<Record<string, unknown>> => {
+            try {
+              return site.type === 3 && rawSite
+                ? await jarDetail(rawSite, id)
+                : await macDetail(site.api, id);
+            } catch (e) {
+              // 主站无法解析（如 csp_Douban 无详情实现），用片名在其它站点兜底
+              if (!name) throw e;
+              const fb = await detailViaAggregateSearch(sub, key, name);
+              if (!fb) throw e;
+              return { ...fb.detail, site_key: fb.siteKey };
+            }
+          },
           subId,
           key,
         );

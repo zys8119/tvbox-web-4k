@@ -68,7 +68,7 @@ onBeforeUnmount(stopAuto);
       <!-- 背景层：所有推荐图叠放，仅当前项可见 -->
       <div class="absolute inset-0">
         <img v-for="(h, i) in heroes" :key="h.vod_id" :src="h.vod_pic"
-          class="absolute inset-0 w-full h-full object-cover blur-2xl brightness-[0.55] transition-all duration-[1200ms] ease-out"
+          class="absolute inset-0 w-full h-full object-cover blur-xl brightness-[0.55] transition-all duration-[1200ms] ease-out"
           :class="i === active
             ? 'opacity-100 scale-125'
             : 'opacity-0 scale-110'

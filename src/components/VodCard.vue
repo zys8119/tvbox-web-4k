@@ -12,7 +12,7 @@ const to = computed<RouteLocationRaw>(() =>
   props.site
     ? {
       name: "site-detail",
-      query: { site: props.site, id: props.item.vod_id },
+      query: { site: props.site, id: props.item.vod_id, name: props.item.vod_name },
     }
     : { path: `/detail/${props.item.vod_id}` },
 );

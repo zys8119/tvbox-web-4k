@@ -81,8 +81,9 @@ watch(tid, async (nextTid) => {
 });
 
 // 页码或筛选项变化时重新拉取列表
+// tid 来自 route.params（顶部主导航切换分类），必须纳入依赖，否则会显示上一分类的旧数据
 watch(
-    () => page.value + "|" + JSON.stringify(route.query),
+    () => tid.value + "|" + page.value + "|" + JSON.stringify(route.query),
     () => load(),
 );
 </script>

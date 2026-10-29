@@ -16,9 +16,16 @@ const desc = ref(false);
 const site = computed(() => String(route.query.site ?? ""));
 const id = computed(() => String(route.query.id ?? ""));
 
+/** 详情实际数据源站点：主站无详情时服务端可能返回其它站点的兜底结果（site_key） */
+const dataSourceSite = computed(() => detail.value?.site_key || site.value);
+
 onMounted(async () => {
   try {
-    const data = await fetchTvboxDetail(site.value, id.value);
+    const data = await fetchTvboxDetail(
+      site.value,
+      id.value,
+      String(route.query.name ?? ""),
+    );
     detail.value = data.list[0] ?? null;
   } catch (e) {
     error.value = (e as Error).message;
@@ -40,15 +47,15 @@ const shownEpisodes = computed(() =>
 const introIsHtml = computed(() => looksLikeHtml(detail.value?.vod_content));
 const safeIntro = computed(() => sanitizeHtml(detail.value?.vod_content));
 
-/** 跳到本站播放页 */
+/** 跳到播放页（组播放使用数据源站点） */
 function playTo(from: string, url: string) {
   return {
     name: "site-play",
     query: {
-      site: site.value,
+      site: dataSourceSite.value,
       flag: from,
       id: url,
-      vod: id.value,
+      vod: detail.value?.vod_id || id.value,
       name: detail.value?.vod_name ?? "",
     },
   };
@@ -63,7 +70,7 @@ function playTo(from: string, url: string) {
     <template v-else-if="detail">
       <div class="flex items-center gap-2 mb-4">
         <RouterLink
-          :to="{ name: 'sites', query: { site } }"
+          :to="{ name: 'sites', query: { site: dataSourceSite } }"
           class="b-none btn text-sm px-3 bg-white/[0.05] hover:bg-white/[0.11]"
         >
           <span class="i-carbon-arrow-left" /> 返回站点
@@ -71,7 +78,7 @@ function playTo(from: string, url: string) {
         <span
           class="text-[11px] text-indigo-300 px-2 py-0.5 rounded-md bg-indigo-500/20"
         >
-          {{ site }}
+          {{ dataSourceSite }}
         </span>
       </div>
 

@@ -40,10 +40,13 @@ const enabledCount = computed(
   () => supported.value.filter((s) => s.enabled).length,
 );
 
-/** 关键词过滤站点名 */
+/** 关键词过滤站点名；默认过滤 JVM（type 3）与不支持类型 */
+const hideJvm = ref(true);
 const shown = computed(() => {
   const kw = filter.value.trim().toLowerCase();
-  const base = supported.value;
+  const base = supported.value.filter(
+    (s) => !hideJvm.value || s.type !== 3,
+  );
   if (!kw) return base;
   return base.filter((s) => s.name.toLowerCase().includes(kw));
 });
@@ -207,25 +210,15 @@ onMounted(load);
       </p>
 
       <div v-if="cfg?.subscriptions?.length" class="mb-4 space-y-2">
-        <div
-          v-for="s in cfg.subscriptions"
-          :key="s.id"
-          class="rounded-xl bg-white/[0.04] px-3 py-3"
-        >
+        <div v-for="s in cfg.subscriptions" :key="s.id" class="rounded-xl bg-white/[0.04] px-3 py-3">
           <div class="flex items-start gap-3">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="text-sm text-gray-100">{{ s.name }}</span>
-                <span
-                  v-if="s.active"
-                  class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300"
-                >
+                <span v-if="s.active" class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300">
                   当前
                 </span>
-                <span
-                  v-else-if="s.cached"
-                  class="text-[10px] px-2 py-0.5 rounded-md bg-white/[0.06] text-gray-400"
-                >
+                <span v-else-if="s.cached" class="text-[10px] px-2 py-0.5 rounded-md bg-white/[0.06] text-gray-400">
                   已缓存
                 </span>
               </div>
@@ -235,24 +228,15 @@ onMounted(load);
               </p>
             </div>
             <div class="flex items-center gap-2 shrink-0">
-              <button
-                class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
-                :disabled="switchingId === s.id || s.active"
-                @click="switchSub(s)"
-              >
+              <button class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
+                :disabled="switchingId === s.id || s.active" @click="switchSub(s)">
                 {{ switchingId === s.id ? "切换中" : s.active ? "当前订阅" : "切换" }}
               </button>
-              <button
-                class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
-                @click="editSub(s)"
-              >
+              <button class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]" @click="editSub(s)">
                 编辑
               </button>
-              <button
-                class="b-none btn text-xs px-2.5 py-1 bg-red-500/10 text-red-300 hover:bg-red-500/20"
-                :disabled="removingId === s.id"
-                @click="removeSub(s)"
-              >
+              <button class="b-none btn text-xs px-2.5 py-1 bg-red-500/10 text-red-300 hover:bg-red-500/20"
+                :disabled="removingId === s.id" @click="removeSub(s)">
                 {{ removingId === s.id ? "删除中" : "删除" }}
               </button>
             </div>
@@ -261,12 +245,9 @@ onMounted(load);
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-[220px_minmax(0,1fr)] gap-2 mb-2">
-        <input
-          v-model="name"
-          type="text"
+        <input v-model="name" type="text"
           class="h-10 rounded-xl px-3 text-sm bg-white/[0.05] text-gray-100 placeholder:text-gray-500 border-0 outline-none ring-0 focus:outline-none focus:ring-0 focus:bg-white/[0.09] transition-colors"
-          placeholder="订阅名称（可选）"
-        />
+          placeholder="订阅名称（可选）" />
         <input v-model="url" type="text"
           class="flex-1 h-10 rounded-xl px-3 text-sm bg-white/[0.05] text-gray-100 placeholder:text-gray-500 border-0 outline-none ring-0 focus:outline-none focus:ring-0 focus:bg-white/[0.09] transition-colors"
           placeholder="https://api.tvbox.xin/" @keyup.enter="save" />
@@ -277,17 +258,11 @@ onMounted(load);
           <span v-if="saving" class="i-carbon-circle-dash animate-spin" />
           {{ saving ? "加载中" : editingId ? "保存并切换" : "新增并加载" }}
         </button>
-        <button
-          class="b-none btn text-sm px-3 h-10 shrink-0 bg-white/[0.05] hover:bg-white/[0.11]"
-          @click="newSub"
-        >
+        <button class="b-none btn text-sm px-3 h-10 shrink-0 bg-white/[0.05] hover:bg-white/[0.11]" @click="newSub">
           新建订阅
         </button>
-        <button
-          class="b-none btn text-sm px-3 h-10 shrink-0 bg-white/[0.05] hover:bg-white/[0.11]"
-          :disabled="!cfg?.activeId"
-          @click="resetEditor"
-        >
+        <button class="b-none btn text-sm px-3 h-10 shrink-0 bg-white/[0.05] hover:bg-white/[0.11]"
+          :disabled="!cfg?.activeId" @click="resetEditor">
           回到当前订阅
         </button>
         <button class="b-none btn text-sm px-3 h-10 shrink-0 bg-white/[0.05] hover:bg-white/[0.11]"
@@ -354,8 +329,14 @@ onMounted(load);
         </div>
       </div>
 
-      <div class="mb-3">
-        <SearchBox v-model="filter" scope="settings-sites" placeholder="搜索站点名…" />
+      <div class="mb-3 flex items-center gap-3">
+        <div class="flex-1">
+          <SearchBox v-model="filter" scope="settings-sites" placeholder="搜索站点名…" />
+        </div>
+        <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none shrink-0">
+          <input type="checkbox" v-model="hideJvm" class="accent-indigo-500 w-3.5 h-3.5 cursor-pointer" />
+          过滤 JVM(type3)
+        </label>
       </div>
 
       <div class="space-y-1.5">

@@ -53,6 +53,8 @@ export interface PlayLine {
 
 export interface VodDetail {
   vod_id: string;
+  /** 服务端兜底解析时可能返回实际数据源站点 key */
+  site_key?: string;
   vod_name: string;
   vod_pic: string;
   vod_actor: string;
@@ -352,9 +354,9 @@ export const fetchTvboxCategory = (
     ...(ext && Object.keys(ext).length ? { ext: JSON.stringify(ext) } : {}),
   });
 
-/** 某站点详情 */
-export const fetchTvboxDetail = (site: string, id: string) =>
-  getJson<{ list: VodDetail[] }>("/api/tvbox/detail", { site, id });
+/** 某站点详情（name 用于主站无详情实现时跨站兜底搜索） */
+export const fetchTvboxDetail = (site: string, id: string, name = "") =>
+  getJson<{ list: VodDetail[] }>("/api/tvbox/detail", { site, id, name });
 
 /** 跨站点聚合搜索 */
 export const fetchTvboxSearch = (wd: string, site?: string) =>
