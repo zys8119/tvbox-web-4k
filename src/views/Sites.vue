@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
+  addSearchHistory,
   fetchTvboxCategory,
   fetchTvboxHome,
   fetchTvboxSearch,
@@ -14,6 +15,9 @@ import {
 import VodGrid from "../components/VodGrid.vue";
 import PagerBar from "../components/PagerBar.vue";
 import SearchBox from "../components/SearchBox.vue";
+
+/** 供全局 KeepAlive（include="Sites"）命中，缓存页面状态 */
+defineOptions({ name: "Sites" });
 
 const route = useRoute();
 const router = useRouter();
@@ -52,6 +56,13 @@ onMounted(async () => {
     sites.value = data.list;
     if (!data.cached) {
       error.value = "尚未配置订阅，请先前往设置页添加";
+      return;
+    }
+    // 从 URL 恢复搜索（如刷新后 /sites?kw=片名）
+    const kw = String(route.query.kw ?? "").trim();
+    if (kw) {
+      keyword.value = kw;
+      if (!searched.value) await doSearch();
       return;
     }
     // 未指定站点时，默认选第一个可用站点
@@ -103,7 +114,21 @@ async function loadSite() {
 watch(
   () => [siteKey.value, tid.value, page.value],
   () => {
+    // 搜索态下（如从详情返回）不重新加载站点列表，保留搜索内容
+    if (searched.value) return;
     if (siteKey.value) loadSite();
+  },
+);
+
+/** 关键词同步到 URL（kw），刷新/直链/从详情返回都能恢复 */
+watch(
+  () => String(route.query.kw ?? ""),
+  (kw) => {
+    if (!kw) return;
+    if (keyword.value.trim() === kw) return;
+    keyword.value = kw;
+    if (!searched.value) doSearch();
+    else searchList.value = [...searchList.value]; // 兜底触发重渲染
   },
 );
 
@@ -133,6 +158,10 @@ function changePage(p: number) {
 async function doSearch() {
   const wd = keyword.value.trim();
   if (!wd) return;
+  // 关键词写入 URL（kw），刷新/直链也能恢复搜索
+  router.replace({ query: { ...route.query, kw: wd } });
+  // 写入跨站搜索记录（scope=sites，绑定当前订阅）
+  addSearchHistory("sites", wd).catch(() => { });
   searching.value = true;
   error.value = "";
   try {
@@ -151,6 +180,12 @@ function clearSearch() {
   keyword.value = "";
   searchList.value = [];
   searched.value = false;
+  // 从 URL 移除 kw 参数，恢复浏览态；站点变化交给 watch，未变化则直接重载列表
+  const site = siteKey.value || activeSites.value[0]?.key || "";
+  const q: Record<string, string> = {};
+  if (site) q.site = site;
+  router.replace({ query: q, force: true });
+  if (site && site === siteKey.value) loadSite();
 }
 
 /** 搜索结果按站点分组展示 */

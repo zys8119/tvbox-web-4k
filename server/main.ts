@@ -29,19 +29,25 @@ import http from "node:http";
 import https from "node:https";
 import {
   addFavorite,
+  addSearchHistory,
+  clearBySubscription,
   clearHistory,
   clearProgress,
   deleteHistory,
   getHistory,
+  getJsonSetting,
   getLatestProgress,
   getMarks,
   getProgress,
   isFavorite,
   listFavorites,
   listHistory,
+  listSearchHistory,
   removeFavorite,
+  removeSearchHistory,
   saveMarks,
   saveProgress,
+  setJsonSetting,
   upsertHistory,
 } from "./db.ts";
 import {
@@ -1185,18 +1191,23 @@ const server = http.createServer(async (req, res) => {
           "GET /detail?id=<vod_id>  详情，含结构化 vod_play_list",
           "GET /play?flag=<线路名>&id=<剧集地址>  播放解析；id 可为直链或 Base64 payload，参数需 urlencode",
           "GET /search?wd=<关键词>  搜索",
-          "GET /api/history  观看历史列表",
-          "POST /api/history  写入/更新历史 {vod_id,vod_name,vod_pic,remarks,flag,ep_name,ep_url,vod}",
-          "DELETE /api/history?id=<vod_id>  删除单条；不带 id 则清空",
-          "GET /api/favorites  收藏列表",
+          "GET /api/history  观看历史列表（绑定当前订阅）",
+          "POST /api/history  写入/更新历史 {vod_id,vod_name,vod_pic,remarks,flag,ep_name,ep_url,vod,site}；site 非空归订阅，否则归主站全局",
+          "DELETE /api/history?id=<vod_id>  删除单条；不带 id 则清空当前订阅可见范围",
+          "GET /api/favorites  收藏列表（绑定当前订阅）",
           "GET /api/favorites/status?id=<vod_id>  是否已收藏 {favorited}",
-          "POST /api/favorites  添加收藏 {vod_id,vod_name,vod_pic,remarks}",
+          "POST /api/favorites  添加收藏 {vod_id,vod_name,vod_pic,remarks,site}",
           "DELETE /api/favorites?id=<vod_id>  取消收藏",
           "GET /api/progress?vod=<vod_id>&flag=<线路名>  取播放进度",
-          "POST /api/progress  保存进度 {vod_id,flag,ep_url,ep_name,position,duration}",
+          "POST /api/progress  保存进度 {vod_id,flag,ep_url,ep_name,position,duration,site}",
           "DELETE /api/progress?vod=<vod_id>&flag=<线路名>  清除进度",
           "GET /api/marks?vod=<vod_id>  取片头片尾 {intro,outro}",
-          "POST /api/marks  保存片头片尾 {vod_id,intro,outro}；传 0 表示取消",
+          "POST /api/marks  保存片头片尾 {vod_id,intro,outro,site}；传 0 表示取消",
+          "GET /api/search-history?scope=<页面>  搜索记录列表 {list}",
+          "POST /api/search-history  添加搜索记录 {scope,word}",
+          "DELETE /api/search-history?scope=<页面>&word=<词>  删除单条；不带 word 则清空该作用域",
+          "GET /api/autoplay  自动播放上下集开关 {enabled}",
+          "POST /api/autoplay  设置自动播放 {enabled}",
         ],
       });
     }
@@ -1303,6 +1314,8 @@ const server = http.createServer(async (req, res) => {
       if (!id) return sendJson(res, 400, { code: 0, msg: "缺少订阅 id" });
       try {
         removeSubscription(id);
+        // 订阅删除后同步清理其绑定的本地数据（历史/收藏/进度/片头片尾/搜索记录）
+        clearBySubscription(id);
         return sendJson(res, 200, {
           ok: true,
           activeId: getActiveSubscriptionId(),
@@ -1551,12 +1564,13 @@ const server = http.createServer(async (req, res) => {
     /* ---------- 本地数据接口（不依赖远端初始化，放在 ensureInit 之前） ---------- */
 
     if (u.pathname === "/api/history") {
+      const subId = getActiveSubscriptionId();
       if (req.method === "GET") {
-        return sendJson(res, 200, { list: listHistory() });
+        return sendJson(res, 200, { list: listHistory(subId) });
       }
       if (req.method === "POST") {
         const b = await readJsonBody(req);
-        upsertHistory({
+        upsertHistory(subId, {
           vod_id: str(b.vod_id),
           vod_name: str(b.vod_name),
           vod_pic: str(b.vod_pic),
@@ -1565,13 +1579,14 @@ const server = http.createServer(async (req, res) => {
           ep_name: str(b.ep_name),
           ep_url: str(b.ep_url),
           vod: str(b.vod),
+          site: str(b.site),
         });
         return sendJson(res, 200, { ok: true });
       }
       if (req.method === "DELETE") {
         const id = q.get("id") ?? "";
-        if (id) deleteHistory(id);
-        else clearHistory();
+        if (id) deleteHistory(subId, id);
+        else clearHistory(subId);
         return sendJson(res, 200, { ok: true });
       }
       return sendJson(res, 405, { code: 0, msg: "method not allowed" });
@@ -1579,26 +1594,29 @@ const server = http.createServer(async (req, res) => {
 
     if (u.pathname === "/api/favorites/status") {
       const id = q.get("id") ?? "";
-      return sendJson(res, 200, { favorited: id ? isFavorite(id) : false });
+      const subId = getActiveSubscriptionId();
+      return sendJson(res, 200, { favorited: id ? isFavorite(subId, id) : false });
     }
 
     if (u.pathname === "/api/favorites") {
+      const subId = getActiveSubscriptionId();
       if (req.method === "GET") {
-        return sendJson(res, 200, { list: listFavorites() });
+        return sendJson(res, 200, { list: listFavorites(subId) });
       }
       if (req.method === "POST") {
         const b = await readJsonBody(req);
-        addFavorite({
+        addFavorite(subId, {
           vod_id: str(b.vod_id),
           vod_name: str(b.vod_name),
           vod_pic: str(b.vod_pic),
           remarks: str(b.remarks),
+          site: str(b.site),
         });
         return sendJson(res, 200, { ok: true });
       }
       if (req.method === "DELETE") {
         const id = q.get("id") ?? "";
-        if (id) removeFavorite(id);
+        if (id) removeFavorite(subId, id);
         return sendJson(res, 200, { ok: true });
       }
       return sendJson(res, 405, { code: 0, msg: "method not allowed" });
@@ -1607,24 +1625,28 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === "/api/progress") {
       const vod = q.get("vod") ?? "";
       const flag = q.get("flag") ?? "";
+      const subId = getActiveSubscriptionId();
       if (req.method === "GET") {
-        const row = flag ? getProgress(vod, flag) : getLatestProgress(vod);
+        const row = flag
+          ? getProgress(subId, vod, flag)
+          : getLatestProgress(subId, vod);
         return sendJson(res, 200, row ?? {});
       }
       if (req.method === "POST") {
         const b = await readJsonBody(req);
-        saveProgress({
+        saveProgress(subId, {
           vod_id: str(b.vod_id),
           flag: str(b.flag),
           ep_url: str(b.ep_url),
           ep_name: str(b.ep_name),
           position: num(b.position),
           duration: num(b.duration),
+          site: str(b.site),
         });
         return sendJson(res, 200, { ok: true });
       }
       if (req.method === "DELETE") {
-        clearProgress(vod, flag || undefined);
+        clearProgress(subId, vod, flag || undefined);
         return sendJson(res, 200, { ok: true });
       }
       return sendJson(res, 405, { code: 0, msg: "method not allowed" });
@@ -1632,8 +1654,9 @@ const server = http.createServer(async (req, res) => {
 
     if (u.pathname === "/api/marks") {
       const vod = q.get("vod") ?? "";
+      const subId = getActiveSubscriptionId();
       if (req.method === "GET") {
-        return sendJson(res, 200, getMarks(vod));
+        return sendJson(res, 200, getMarks(subId, vod));
       }
       if (req.method === "POST") {
         const b = await readJsonBody(req);
@@ -1642,7 +1665,47 @@ const server = http.createServer(async (req, res) => {
         const patch: { intro?: number; outro?: number } = {};
         if (b.intro !== undefined) patch.intro = num(b.intro);
         if (b.outro !== undefined) patch.outro = num(b.outro);
-        return sendJson(res, 200, saveMarks(id, patch));
+        return sendJson(res, 200, saveMarks(subId, id, patch, str(b.site)));
+      }
+      return sendJson(res, 405, { code: 0, msg: "method not allowed" });
+    }
+
+    /* ---------- 搜索记录接口 ---------- */
+
+    if (u.pathname === "/api/search-history") {
+      const subId = getActiveSubscriptionId();
+      const scope = q.get("scope") ?? "";
+      if (req.method === "GET") {
+        if (!scope) return sendJson(res, 400, { code: 0, msg: "缺少 scope" });
+        return sendJson(res, 200, { list: listSearchHistory(subId, scope) });
+      }
+      if (req.method === "POST") {
+        const b = await readJsonBody(req);
+        addSearchHistory(subId, str(b.scope), str(b.word));
+        return sendJson(res, 200, { ok: true });
+      }
+      if (req.method === "DELETE") {
+        if (!scope) return sendJson(res, 400, { code: 0, msg: "缺少 scope" });
+        const word = q.get("word") ?? "";
+        removeSearchHistory(subId, scope, word || undefined);
+        return sendJson(res, 200, { ok: true });
+      }
+      return sendJson(res, 405, { code: 0, msg: "method not allowed" });
+    }
+
+    /* ---------- 自动播放上下集设置（绑定订阅） ---------- */
+
+    if (u.pathname === "/api/autoplay") {
+      const subId = getActiveSubscriptionId();
+      const key = "autoplay:" + subId;
+      if (req.method === "GET") {
+        const enabled = getJsonSetting<boolean>(key, true);
+        return sendJson(res, 200, { enabled });
+      }
+      if (req.method === "POST") {
+        const b = await readJsonBody(req);
+        setJsonSetting(key, !!b.enabled);
+        return sendJson(res, 200, { enabled: !!b.enabled });
       }
       return sendJson(res, 405, { code: 0, msg: "method not allowed" });
     }

@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
-import { fetchTvboxDetail, type VodDetail } from "../api";
+import {
+  addFavoriteApi,
+  fetchFavoriteStatus,
+  fetchTvboxDetail,
+  removeFavoriteApi,
+  type VodDetail,
+} from "../api";
 import { looksLikeHtml, sanitizeHtml } from "../utils/sanitize";
 
 const route = useRoute();
@@ -13,11 +19,19 @@ const lineIndex = ref(0);
 const expanded = ref(false);
 const desc = ref(false);
 
+/** 是否已收藏（订阅站点收藏，归属当前订阅） */
+const favorited = ref(false);
+/** 收藏按钮防抖 */
+const favBusy = ref(false);
+
 const site = computed(() => String(route.query.site ?? ""));
 const id = computed(() => String(route.query.id ?? ""));
 
 /** 详情实际数据源站点：主站无详情时服务端可能返回其它站点的兜底结果（site_key） */
 const dataSourceSite = computed(() => detail.value?.site_key || site.value);
+
+/** 收藏标识：优先使用真实 vod_id（站点详情 id 可能为搜索聚合 id） */
+const favKey = computed(() => detail.value?.vod_id || id.value);
 
 onMounted(async () => {
   try {
@@ -27,12 +41,47 @@ onMounted(async () => {
       String(route.query.name ?? ""),
     );
     detail.value = data.list[0] ?? null;
+    // 查询收藏状态
+    if (favKey.value) {
+      try {
+        const s = await fetchFavoriteStatus(favKey.value);
+        favorited.value = s.favorited;
+      } catch {
+        favorited.value = false;
+      }
+    }
   } catch (e) {
     error.value = (e as Error).message;
   } finally {
     loading.value = false;
   }
 });
+
+/** 切换收藏 */
+async function toggleFavorite() {
+  const vid = favKey.value;
+  if (!vid || !detail.value || favBusy.value) return;
+  favBusy.value = true;
+  try {
+    if (favorited.value) {
+      await removeFavoriteApi(vid);
+      favorited.value = false;
+    } else {
+      await addFavoriteApi({
+        vod_id: vid,
+        vod_name: detail.value.vod_name,
+        vod_pic: detail.value.vod_pic,
+        remarks: detail.value.vod_remarks,
+        site: dataSourceSite.value,
+      });
+      favorited.value = true;
+    }
+  } catch {
+    /* 收藏失败保持原状态 */
+  } finally {
+    favBusy.value = false;
+  }
+}
 
 const lines = computed(() => detail.value?.vod_play_list ?? []);
 const currentLine = computed(() => lines.value[lineIndex.value] ?? null);
@@ -131,6 +180,14 @@ function playTo(from: string, url: string) {
               <span class="i-carbon-play-filled" />
               播放第 1 集
             </RouterLink>
+
+            <button class="b-none btn w-full mt-3 !py-2.5" :class="favorited
+              ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+              : 'bg-white/[0.05] text-gray-300 hover:bg-white/[0.11]'
+              " :disabled="favBusy" :title="favorited ? '取消收藏' : '加入收藏'" @click="toggleFavorite">
+              <span class="i-carbon-favorite" />
+              {{ favorited ? "已收藏" : "收藏" }}
+            </button>
           </div>
         </section>
 

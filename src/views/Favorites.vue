@@ -45,6 +45,14 @@ async function remove(id: string) {
   }
 }
 
+/** 详情跳转：收藏来自订阅站点时跳站点详情，否则跳主站详情 */
+function detailTo(f: FavoriteItem) {
+  if (f.site) {
+    return { name: "site-detail", query: { site: f.site, id: f.vod_id, name: f.vod_name } };
+  }
+  return `/detail/${f.vod_id}`;
+}
+
 onMounted(load);
 </script>
 
@@ -85,7 +93,7 @@ onMounted(load);
     <div v-else class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 md:gap-4">
       <div v-for="f in filtered" :key="f.vod_id"
         class="group card glass-hover hover:-translate-y-1.5 duration-300 ease-out relative">
-        <RouterLink :to="`/detail/${f.vod_id}`" class="block">
+        <RouterLink :to="detailTo(f)" class="block">
           <div class="relative aspect-[3/4] overflow-hidden bg-white/5">
             <img v-if="f.vod_pic" :src="f.vod_pic" :alt="f.vod_name" loading="lazy"
               class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"

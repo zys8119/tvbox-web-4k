@@ -266,7 +266,11 @@ function parseSubscriptionJson(text: string): Record<string, unknown> {
     try {
       return JSON.parse(t) as Record<string, unknown>;
     } catch {
-      return null;
+      try {
+        return new Function("return " + t)();
+      } catch {
+        return null;
+      }
     }
   };
 

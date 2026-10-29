@@ -145,6 +145,8 @@ export interface HistoryItem {
   ep_name: string;
   ep_url: string;
   vod: string;
+  /** 数据来源站点 key，非空表示订阅站点记录 */
+  site: string;
   updated_at: number;
 }
 
@@ -153,6 +155,8 @@ export interface FavoriteItem {
   vod_name: string;
   vod_pic: string;
   remarks: string;
+  /** 数据来源站点 key，非空表示订阅站点收藏 */
+  site: string;
   created_at: number;
 }
 
@@ -185,6 +189,7 @@ export const pushHistory = (o: {
   ep_name?: string;
   ep_url?: string;
   vod?: string;
+  site?: string;
 }) => sendJson<{ ok: boolean }>("/api/history", "POST", o);
 
 /** 删除单条历史；不传 id 则清空 */
@@ -208,6 +213,7 @@ export const addFavoriteApi = (o: {
   vod_name?: string;
   vod_pic?: string;
   remarks?: string;
+  site?: string;
 }) => sendJson<{ ok: boolean }>("/api/favorites", "POST", o);
 
 /** 取消收藏 */
@@ -232,6 +238,7 @@ export const saveProgressApi = (o: {
   ep_name?: string;
   position?: number;
   duration?: number;
+  site?: string;
 }) => sendJson<{ ok: boolean }>("/api/progress", "POST", o);
 
 /** 取片头片尾标记 */
@@ -243,6 +250,7 @@ export const saveMarksApi = (o: {
   vod_id: string;
   intro?: number;
   outro?: number;
+  site?: string;
 }) => sendJson<Marks>("/api/marks", "POST", o);
 
 /* ============================== TVBox 订阅 ============================== */
@@ -372,6 +380,40 @@ export interface PlayResolveResult {
 }
 export const fetchTvboxParse = (url: string) =>
   getJson<PlayResolveResult>("/api/tvbox/parse", { url });
+
+/* ============================== 搜索记录 / 自动播放 ============================== */
+
+/** 搜索记录（服务端存储，绑定当前订阅） */
+export interface SearchHistoryItem {
+  word: string;
+  updated_at: number;
+}
+
+/** 读取某作用域的搜索记录 */
+export const fetchSearchHistory = (scope: string) =>
+  getJson<{ list: SearchHistoryItem[] }>("/api/search-history", { scope });
+
+/** 添加搜索记录 */
+export const addSearchHistory = (scope: string, word: string) =>
+  sendJson<{ ok: boolean }>("/api/search-history", "POST", { scope, word });
+
+/** 删除一条搜索记录；word 为空则清空该作用域 */
+export const removeSearchHistory = (scope: string, word = "") =>
+  sendJson<{ ok: boolean }>(
+    "/api/search-history?scope=" +
+      encodeURIComponent(scope) +
+      (word ? "&word=" + encodeURIComponent(word) : ""),
+    "DELETE",
+  );
+
+/** 自动播放上下集设置 */
+export const fetchAutoPlay = () =>
+  getJson<{ enabled: boolean }>("/api/autoplay");
+
+export const setAutoPlay = (enabled: boolean) =>
+  sendJson<{ ok: boolean; enabled: boolean }>("/api/autoplay", "POST", {
+    enabled,
+  });
 
 /** 把后端返回的 header 字符串解析成对象 */
 export function parseHeader(raw?: string): Record<string, string> {

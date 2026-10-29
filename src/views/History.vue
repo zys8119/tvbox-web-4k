@@ -147,6 +147,28 @@ async function open(h: HistoryItem) {
   if (opening.value) return;
   opening.value = h.vod_id;
   try {
+    // 订阅站点来源：直达站点播放页，无集地址则回站点详情页
+    if (h.site) {
+      if (h.flag && h.ep_url) {
+        router.push({
+          name: "site-play",
+          query: {
+            site: h.site,
+            flag: h.flag,
+            id: h.ep_url,
+            vod: h.vod || h.vod_id,
+            name: h.vod_name,
+          },
+        });
+      } else {
+        router.push({
+          name: "site-detail",
+          query: { site: h.site, id: h.vod_id, name: h.vod_name },
+        });
+      }
+      return;
+    }
+
     // 有完整线路与集地址，直接跳播放页
     if (h.flag && h.ep_url) {
       router.push({

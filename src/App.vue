@@ -148,7 +148,9 @@ function doSearch() {
     <main class="flex-1">
       <RouterView v-slot="{ Component }">
         <Transition name="fade" mode="out-in">
-          <component :is="Component" />
+          <KeepAlive include="Sites">
+            <component :is="Component" />
+          </KeepAlive>
         </Transition>
       </RouterView>
     </main>
