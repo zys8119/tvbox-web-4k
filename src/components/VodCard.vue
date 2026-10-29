@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import type { RouteLocationRaw } from "vue-router";
 import type { VodItem } from "../api";
+import { cleanPicUrl } from "../utils/pic";
 
 const props = withDefaults(defineProps<{ item: VodItem; site?: string }>(), {
   site: "",
@@ -21,7 +22,7 @@ const to = computed<RouteLocationRaw>(() =>
 <template>
   <RouterLink :to="to" class="group block card glass-hover hover:-translate-y-1.5 duration-300 ease-out">
     <div class="relative aspect-[3/4] overflow-hidden bg-white/5">
-      <img v-if="item.vod_pic" :src="item.vod_pic" :alt="item.vod_name" loading="lazy"
+      <img v-if="item.vod_pic" :src="cleanPicUrl(item.vod_pic)" :alt="item.vod_name" loading="lazy"
         class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
         referrerpolicy="no-referrer" />
       <div v-else class="w-full h-full flex items-center justify-center text-gray-600 text-xs">

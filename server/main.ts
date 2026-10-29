@@ -1044,7 +1044,7 @@ class Woshinidie {
         {
           vod_id: id,
           vod_name: d.name,
-          vod_pic: d.pic,
+          vod_pic: cleanPic(d.pic),
           vod_actor: d.actor,
           vod_director: d.director,
           vod_tag: d.tag,
@@ -1104,7 +1104,7 @@ class Woshinidie {
         .map((b) => ({
           vod_id: String(b.id),
           vod_name: b.name,
-          vod_pic: b.pic,
+          vod_pic: cleanPic(b.pic),
           vod_remarks: b.remark,
         })),
     };
