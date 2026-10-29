@@ -5,7 +5,7 @@
  *   - type 1  : 苹果CMS / 标准 JSON 采集站，全量支持列表、分类、搜索、详情、播放
  *   - type 4  : 聚合 API，可递归展开其内部站点
  *   - type 0  : 仅解析 / 列表（当前订阅中未使用，保留兼容）
- *   - type 3  : csp_* 依赖 Android JAR 运行时，浏览器无法执行，仅列出并标记不可用
+ *   - type 3  : csp_* 通过服务端 JVM 桥接执行
  */
 import { getJsonSetting, getSetting, setJsonSetting, setSetting } from "./db.ts";
 
@@ -143,10 +143,9 @@ function judge(s: RawSite): { supported: boolean; reason?: string } {
       : { supported: false, reason: "缺少有效 api 地址" };
   }
   if (s.type === 3) {
-    return {
-      supported: false,
-      reason: "依赖 Android JAR 运行时（csp_*），浏览器无法执行",
-    };
+    return s.api
+      ? { supported: true }
+      : { supported: false, reason: "缺少有效 csp api" };
   }
   if (s.type === 0) {
     return { supported: true };
@@ -196,6 +195,16 @@ export function activeSites(sub: Subscription): Site[] {
   return normalizeSites(sub).filter(
     (s) => s.supported && (enabled[s.key] === undefined ? true : enabled[s.key]),
   );
+}
+
+/** 返回已启用且可代理的原始站点配置 */
+export function activeRawSites(sub: Subscription): RawSite[] {
+  const enabled = getEnabledMap();
+  return sub.sites.filter((s) => {
+    const key = String(s.key ?? "");
+    const j = judge(s);
+    return j.supported && (enabled[key] === undefined ? true : enabled[key]);
+  });
 }
 
 /* ============================== 苹果CMS 请求 ============================== */

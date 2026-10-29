@@ -45,6 +45,7 @@ import {
   upsertHistory,
 } from "./db.ts";
 import {
+  activeRawSites,
   activeSites,
   getCachedSubscription,
   getEnabledMap,
@@ -59,6 +60,7 @@ import {
   setSitesEnabled,
   setSubscriptionUrl,
 } from "./tvbox.ts";
+import { jarCategory, jarDetail, jarHome, jarSearch } from "./jarbridge.ts";
 
 /* ============================== 常量 ============================== */
 
@@ -1125,10 +1127,15 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { code: 0, msg: "请先在设置中配置订阅" });
       const key = q.get("site") ?? "";
       const site = activeSites(sub).find((x) => x.key === key);
+      const rawSite = activeRawSites(sub).find((x) => String(x.key ?? "") === key);
       if (!site)
         return sendJson(res, 404, { code: 0, msg: "站点不存在或未启用" });
       try {
-        return sendJson(res, 200, await macHome(site.api));
+        return sendJson(
+          res,
+          200,
+          site.type === 3 && rawSite ? await jarHome(rawSite) : await macHome(site.api),
+        );
       } catch (e) {
         return sendJson(res, 502, { code: 0, msg: (e as Error).message });
       }
@@ -1140,6 +1147,7 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { code: 0, msg: "请先在设置中配置订阅" });
       const key = q.get("site") ?? "";
       const site = activeSites(sub).find((x) => x.key === key);
+      const rawSite = activeRawSites(sub).find((x) => String(x.key ?? "") === key);
       if (!site)
         return sendJson(res, 404, { code: 0, msg: "站点不存在或未启用" });
       let ext: Record<string, string> | undefined;
@@ -1152,12 +1160,20 @@ const server = http.createServer(async (req, res) => {
         }
       }
       try {
-        const data = await macCategory(
-          site.api,
-          q.get("tid") ?? "",
-          Number(q.get("page") ?? 1) || 1,
-          ext,
-        );
+        const data =
+          site.type === 3 && rawSite
+            ? await jarCategory(
+                rawSite,
+                q.get("tid") ?? "",
+                Number(q.get("page") ?? 1) || 1,
+                ext,
+              )
+            : await macCategory(
+                site.api,
+                q.get("tid") ?? "",
+                Number(q.get("page") ?? 1) || 1,
+                ext,
+              );
         return sendJson(res, 200, data);
       } catch (e) {
         return sendJson(res, 502, { code: 0, msg: (e as Error).message });
@@ -1170,10 +1186,14 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { code: 0, msg: "请先在设置中配置订阅" });
       const key = q.get("site") ?? "";
       const site = activeSites(sub).find((x) => x.key === key);
+      const rawSite = activeRawSites(sub).find((x) => String(x.key ?? "") === key);
       if (!site)
         return sendJson(res, 404, { code: 0, msg: "站点不存在或未启用" });
       try {
-        const d = await macDetail(site.api, q.get("id") ?? "");
+        const d =
+          site.type === 3 && rawSite
+            ? await jarDetail(rawSite, q.get("id") ?? "")
+            : await macDetail(site.api, q.get("id") ?? "");
         return sendJson(res, 200, { list: [d] });
       } catch (e) {
         return sendJson(res, 502, { code: 0, msg: (e as Error).message });
@@ -1190,6 +1210,9 @@ const server = http.createServer(async (req, res) => {
       const sites = activeSites(sub).filter(
         (x) => x.searchable && (!only || x.key === only),
       );
+      const rawMap = new Map(
+        activeRawSites(sub).map((s) => [String(s.key ?? ""), s] as const),
+      );
       const results: Array<Record<string, unknown>> = [];
       // 并发上限 8，避免一次性打爆所有采集站
       const limit = 8;
@@ -1198,7 +1221,10 @@ const server = http.createServer(async (req, res) => {
         const settled = await Promise.allSettled(
           batch.map(async (s) => ({
             site: s,
-            list: await macSearch(s.api, wd),
+            list:
+              s.type === 3 && rawMap.get(s.key)
+                ? await jarSearch(rawMap.get(s.key)!, wd)
+                : await macSearch(s.api, wd),
           })),
         );
         for (const r of settled) {
