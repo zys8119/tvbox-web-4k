@@ -258,6 +258,46 @@ async function fetchWithTimeout(
   }
 }
 
+/** 尝试把订阅响应解析成 JSON，兼容纯 JSON、Base64、带混淆代码的 Base64 */
+function parseSubscriptionJson(text: string): Record<string, unknown> {
+  const toJson = (s: string): Record<string, unknown> | null => {
+    const t = s.trim();
+    if (!t.startsWith("{") && !t.startsWith("[")) return null;
+    try {
+      return JSON.parse(t) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
+
+  // 1) 直接是 JSON
+  const direct = toJson(text);
+  if (direct) return direct;
+
+  // 2) 整个响应就是 Base64
+  const wholeDecoded = Buffer.from(text, "base64").toString("utf8");
+  const fromWhole = toJson(wholeDecoded);
+  if (fromWhole) return fromWhole;
+
+  // 3) 内容里混着混淆代码，提取最长的 Base64 段
+  const matches = text.match(/[A-Za-z0-9+/]{100,}={0,2}/g);
+  if (matches?.length) {
+    const base64 = matches.sort((a, b) => b.length - a.length)[0];
+    const decoded = Buffer.from(base64, "base64").toString("utf8");
+    // 删除以 // 开头的整行注释
+    const cleaned = decoded
+      .split(/\r?\n/)
+      .filter((line) => !line.trimStart().startsWith("//"))
+      .join("\n");
+    const fromExtracted = toJson(cleaned);
+    if (fromExtracted) return fromExtracted;
+  }
+
+  throw new Error(
+    "订阅返回的不是 JSON，请确认地址正确（部分站点需 TVBox 客户端 UA）",
+  );
+}
+
 /** 拉取并解析订阅 */
 export async function refreshSubscription(
   id = getActiveSubscriptionId(),
@@ -277,19 +317,7 @@ export async function refreshSubscription(
   if (!res.ok) throw new Error("订阅请求失败：HTTP " + res.status);
 
   const text = (await res.text()).trim();
-  console.log(Buffer.from(text, "base64").toString());
-  if (!text.startsWith("{") && !text.startsWith("[")) {
-    throw new Error(
-      "订阅返回的不是 JSON，请确认地址正确（部分站点需 TVBox 客户端 UA）",
-    );
-  }
-
-  let raw: Record<string, unknown>;
-  try {
-    raw = JSON.parse(text) as Record<string, unknown>;
-  } catch {
-    throw new Error("订阅 JSON 解析失败");
-  }
+  const raw = parseSubscriptionJson(text);
 
   const sub: Subscription = {
     spider: typeof raw.spider === "string" ? raw.spider : undefined,
