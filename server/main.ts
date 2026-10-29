@@ -63,8 +63,10 @@ import {
   setSiteEnabled,
   setSitesEnabled,
   setSubscriptionUrl,
+  type Site,
 } from "./tvbox.ts";
 import { jarCategory, jarDetail, jarHome, jarSearch } from "./jarbridge.ts";
+import { siteCacheKey, withSiteCache } from "./cache.ts";
 
 /* ============================== 常量 ============================== */
 
@@ -83,6 +85,26 @@ const NSFW =
 
 /** 直链判断正则，与原实现 j() 完全一致 */
 const DIRECT_RE = /^.*\.(mp4|m3u8|flv|mkv|avi|ts|mov|mpd|m4a|wmv)(\?.*)?$/i;
+
+/* ============================== 站点页面缓存 ============================== */
+
+/** 各类型页面的缓存时长（毫秒）：防止每次请求都穿透到源站 */
+const TTL = {
+  home: 10 * 60 * 1000,
+  category: 10 * 60 * 1000,
+  detail: 60 * 60 * 1000,
+  search: 5 * 60 * 1000,
+} as const;
+
+/** 站点接口签名：把 api / jar 纳入缓存键，订阅刷新或站点配置变化后旧缓存自然失效 */
+function siteSig(
+  site: Site | null,
+  raw?: { api?: string; jar?: string } | null,
+): string {
+  const api = String(raw?.api ?? site?.api ?? "");
+  const jar = String(raw?.jar ?? "").split(";")[0] ?? "";
+  return api + "|" + jar;
+}
 
 /* ============================== 加密工具 ============================== */
 
@@ -1201,14 +1223,27 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { code: 0, msg: "请先在设置中配置订阅" });
       const key = q.get("site") ?? "";
       const site = activeSites(sub).find((x) => x.key === key);
-      const rawSite = activeRawSites(sub).find((x) => String(x.key ?? "") === key);
+      const rawSite = activeRawSites(sub).find(
+        (x) => String(x.key ?? "") === key,
+      );
       if (!site)
         return sendJson(res, 404, { code: 0, msg: "站点不存在或未启用" });
+      const subId = getActiveSubscriptionId();
+      const cacheKey = siteCacheKey(subId, key, "home", {
+        sig: siteSig(site, rawSite),
+      });
       try {
         return sendJson(
           res,
           200,
-          site.type === 3 && rawSite ? await jarHome(rawSite) : await macHome(site.api),
+          await withSiteCache(
+            cacheKey,
+            TTL.home,
+            () =>
+              site.type === 3 && rawSite ? jarHome(rawSite) : macHome(site.api),
+            subId,
+            key,
+          ),
         );
       } catch (e) {
         return sendJson(res, 502, { code: 0, msg: (e as Error).message });
@@ -1221,7 +1256,9 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { code: 0, msg: "请先在设置中配置订阅" });
       const key = q.get("site") ?? "";
       const site = activeSites(sub).find((x) => x.key === key);
-      const rawSite = activeRawSites(sub).find((x) => String(x.key ?? "") === key);
+      const rawSite = activeRawSites(sub).find(
+        (x) => String(x.key ?? "") === key,
+      );
       if (!site)
         return sendJson(res, 404, { code: 0, msg: "站点不存在或未启用" });
       let ext: Record<string, string> | undefined;
@@ -1233,21 +1270,26 @@ const server = http.createServer(async (req, res) => {
           ext = undefined;
         }
       }
+      const subId = getActiveSubscriptionId();
+      const tid = q.get("tid") ?? "";
+      const page = Number(q.get("page") ?? 1) || 1;
+      const cacheKey = siteCacheKey(subId, key, "category", {
+        sig: siteSig(site, rawSite),
+        tid,
+        page,
+        ext,
+      });
       try {
-        const data =
-          site.type === 3 && rawSite
-            ? await jarCategory(
-                rawSite,
-                q.get("tid") ?? "",
-                Number(q.get("page") ?? 1) || 1,
-                ext,
-              )
-            : await macCategory(
-                site.api,
-                q.get("tid") ?? "",
-                Number(q.get("page") ?? 1) || 1,
-                ext,
-              );
+        const data = await withSiteCache(
+          cacheKey,
+          TTL.category,
+          () =>
+            site.type === 3 && rawSite
+              ? jarCategory(rawSite, tid, page, ext)
+              : macCategory(site.api, tid, page, ext),
+          subId,
+          key,
+        );
         return sendJson(res, 200, data);
       } catch (e) {
         return sendJson(res, 502, { code: 0, msg: (e as Error).message });
@@ -1260,14 +1302,28 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { code: 0, msg: "请先在设置中配置订阅" });
       const key = q.get("site") ?? "";
       const site = activeSites(sub).find((x) => x.key === key);
-      const rawSite = activeRawSites(sub).find((x) => String(x.key ?? "") === key);
+      const rawSite = activeRawSites(sub).find(
+        (x) => String(x.key ?? "") === key,
+      );
       if (!site)
         return sendJson(res, 404, { code: 0, msg: "站点不存在或未启用" });
+      const subId = getActiveSubscriptionId();
+      const id = q.get("id") ?? "";
+      const cacheKey = siteCacheKey(subId, key, "detail", {
+        sig: siteSig(site, rawSite),
+        id,
+      });
       try {
-        const d =
-          site.type === 3 && rawSite
-            ? await jarDetail(rawSite, q.get("id") ?? "")
-            : await macDetail(site.api, q.get("id") ?? "");
+        const d = await withSiteCache(
+          cacheKey,
+          TTL.detail,
+          () =>
+            site.type === 3 && rawSite
+              ? jarDetail(rawSite, id)
+              : macDetail(site.api, id),
+          subId,
+          key,
+        );
         return sendJson(res, 200, { list: [d] });
       } catch (e) {
         return sendJson(res, 502, { code: 0, msg: (e as Error).message });
@@ -1287,33 +1343,59 @@ const server = http.createServer(async (req, res) => {
       const rawMap = new Map(
         activeRawSites(sub).map((s) => [String(s.key ?? ""), s] as const),
       );
-      const results: Array<Record<string, unknown>> = [];
-      // 并发上限 8，避免一次性打爆所有采集站
-      const limit = 8;
-      for (let i = 0; i < sites.length; i += limit) {
-        const batch = sites.slice(i, i + limit);
-        const settled = await Promise.allSettled(
-          batch.map(async (s) => ({
-            site: s,
-            list:
-              s.type === 3 && rawMap.get(s.key)
-                ? await jarSearch(rawMap.get(s.key)!, wd)
-                : await macSearch(s.api, wd),
-          })),
+      // 参与搜索的站点签名，站点启停/配置变化后搜索结果缓存自然失效
+      const siteSigs = [...rawMap.values()]
+        .filter(
+          (s) => s.searchable !== 0 && (!only || String(s.key ?? "") === only),
+        )
+        .sort((a, b) => String(a.key).localeCompare(String(b.key)))
+        .map((s) => `${String(s.key ?? "")}:${siteSig(null, s)}`);
+      const subId = getActiveSubscriptionId();
+      const cacheKey = siteCacheKey(subId, "search", "all", {
+        wd,
+        only,
+        sites: siteSigs,
+      });
+      try {
+        const results = await withSiteCache(
+          cacheKey,
+          TTL.search,
+          async () => {
+            const out: Array<Record<string, unknown>> = [];
+            // 并发上限 8，避免一次性打爆所有采集站
+            const limit = 8;
+            for (let i = 0; i < sites.length; i += limit) {
+              const batch = sites.slice(i, i + limit);
+              const settled = await Promise.allSettled(
+                batch.map(async (s) => ({
+                  site: s,
+                  list:
+                    s.type === 3 && rawMap.get(s.key)
+                      ? await jarSearch(rawMap.get(s.key)!, wd)
+                      : await macSearch(s.api, wd),
+                })),
+              );
+              for (const r of settled) {
+                if (r.status !== "fulfilled") continue;
+                const { site, list } = r.value;
+                for (const v of list) {
+                  out.push({
+                    ...v,
+                    site_key: site.key,
+                    site_name: site.name,
+                  });
+                }
+              }
+            }
+            return out;
+          },
+          subId,
+          "search",
         );
-        for (const r of settled) {
-          if (r.status !== "fulfilled") continue;
-          const { site, list } = r.value;
-          for (const v of list) {
-            results.push({
-              ...v,
-              site_key: site.key,
-              site_name: site.name,
-            });
-          }
-        }
+        return sendJson(res, 200, { list: results });
+      } catch (e) {
+        return sendJson(res, 502, { code: 0, msg: (e as Error).message });
       }
-      return sendJson(res, 200, { list: results });
     }
 
     /* ---------- 本地数据接口（不依赖远端初始化，放在 ensureInit 之前） ---------- */
@@ -1418,10 +1500,26 @@ const server = http.createServer(async (req, res) => {
     await ensureInit();
 
     if (u.pathname === "/home") {
-      return sendJson(res, 200, await spider.homeContent());
+      return sendJson(
+        res,
+        200,
+        await withSiteCache(
+          siteCacheKey("", "woshinidie", "home"),
+          TTL.home,
+          () => spider.homeContent(),
+        ),
+      );
     }
     if (u.pathname === "/home/video") {
-      return sendJson(res, 200, await spider.homeVideoContent());
+      return sendJson(
+        res,
+        200,
+        await withSiteCache(
+          siteCacheKey("", "woshinidie", "home-video"),
+          TTL.home,
+          () => spider.homeVideoContent(),
+        ),
+      );
     }
     if (u.pathname === "/category") {
       const tid = q.get("tid") ?? "";
@@ -1435,10 +1533,26 @@ const server = http.createServer(async (req, res) => {
           ext = undefined;
         }
       }
-      return sendJson(res, 200, await spider.categoryContent(tid, page, ext));
+      return sendJson(
+        res,
+        200,
+        await withSiteCache(
+          siteCacheKey("", "woshinidie", "category", { tid, page, ext }),
+          TTL.category,
+          () => spider.categoryContent(tid, page, ext),
+        ),
+      );
     }
     if (u.pathname === "/detail") {
-      return sendJson(res, 200, await spider.detailContent(q.get("id") ?? ""));
+      return sendJson(
+        res,
+        200,
+        await withSiteCache(
+          siteCacheKey("", "woshinidie", "detail", { id: q.get("id") ?? "" }),
+          TTL.detail,
+          () => spider.detailContent(q.get("id") ?? ""),
+        ),
+      );
     }
     if (u.pathname === "/play") {
       return sendJson(
@@ -1448,7 +1562,15 @@ const server = http.createServer(async (req, res) => {
       );
     }
     if (u.pathname === "/search") {
-      return sendJson(res, 200, await spider.searchContent(q.get("wd") ?? ""));
+      return sendJson(
+        res,
+        200,
+        await withSiteCache(
+          siteCacheKey("", "woshinidie", "search", { wd: q.get("wd") ?? "" }),
+          TTL.search,
+          () => spider.searchContent(q.get("wd") ?? ""),
+        ),
+      );
     }
 
     sendJson(res, 404, { code: 0, msg: "not found" });

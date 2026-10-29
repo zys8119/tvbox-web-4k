@@ -1,12 +1,25 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import type { RouteLocationRaw } from "vue-router";
 import type { VodItem } from "../api";
 
-defineProps<{ item: VodItem }>();
+const props = withDefaults(defineProps<{ item: VodItem; site?: string }>(), {
+  site: "",
+});
+
+/** 传入 site 时跳转站点详情（site-detail），否则走站内 /detail/:id */
+const to = computed<RouteLocationRaw>(() =>
+  props.site
+    ? {
+      name: "site-detail",
+      query: { site: props.site, id: props.item.vod_id },
+    }
+    : { path: `/detail/${props.item.vod_id}` },
+);
 </script>
 
 <template>
-  <RouterLink :to="`/detail/${item.vod_id}`"
-    class="group block card glass-hover hover:-translate-y-1.5 duration-300 ease-out">
+  <RouterLink :to="to" class="group block card glass-hover hover:-translate-y-1.5 duration-300 ease-out">
     <div class="relative aspect-[3/4] overflow-hidden bg-white/5">
       <img v-if="item.vod_pic" :src="item.vod_pic" :alt="item.vod_name" loading="lazy"
         class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"

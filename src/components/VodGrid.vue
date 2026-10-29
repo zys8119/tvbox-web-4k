@@ -3,18 +3,22 @@ import type { VodItem } from "../api";
 import VodCard from "./VodCard.vue";
 import VodSkeleton from "./VodSkeleton.vue";
 
-defineProps<{ list: VodItem[]; loading?: boolean; skeleton?: number }>();
+defineProps<{
+  list: VodItem[];
+  loading?: boolean;
+  skeleton?: number;
+  /** 站点 key：传入后卡片跳转到站点详情（site-detail） */
+  site?: string;
+}>();
 </script>
 
 <template>
-  <div
-    class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 md:gap-4"
-  >
+  <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 md:gap-4">
     <template v-if="loading">
       <VodSkeleton v-for="i in skeleton ?? 14" :key="i" />
     </template>
     <template v-else>
-      <VodCard v-for="item in list" :key="item.vod_id" :item="item" />
+      <VodCard v-for="item in list" :key="item.vod_id" :item="item" :site="site" />
     </template>
   </div>
 </template>

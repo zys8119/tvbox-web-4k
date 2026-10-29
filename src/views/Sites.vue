@@ -175,10 +175,7 @@ const grouped = computed(() => {
           {{ activeSites.length }} 个可用
         </span>
       </h2>
-      <RouterLink
-        to="/settings"
-        class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
-      >
+      <RouterLink to="/settings" class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]">
         <span class="i-carbon-settings text-[10px]" /> 订阅设置
       </RouterLink>
     </div>
@@ -186,17 +183,9 @@ const grouped = computed(() => {
     <p v-if="error" class="text-center text-red-400 py-16">{{ error }}</p>
 
     <!-- 站点选择 -->
-    <div
-      v-if="activeSites.length"
-      class="flex items-center gap-2 overflow-x-auto pb-3 mb-3"
-    >
-      <button
-        v-for="s in activeSites"
-        :key="s.key"
-        class="b-none chip"
-        :class="s.key === siteKey ? 'chip-active' : 'chip-idle'"
-        @click="pickSite(s.key)"
-      >
+    <div v-if="activeSites.length" class="flex items-center gap-2 overflow-x-auto pb-3 mb-3">
+      <button v-for="s in activeSites" :key="s.key" class="b-none chip"
+        :class="s.key === siteKey ? 'chip-active' : 'chip-idle'" @click="pickSite(s.key)">
         {{ s.name }}
       </button>
     </div>
@@ -205,18 +194,9 @@ const grouped = computed(() => {
     <div v-if="activeSites.length" class="mb-5">
       <div class="flex gap-2">
         <div class="flex-1">
-          <SearchBox
-            v-model="keyword"
-            scope="sites"
-            placeholder="跨站搜索片名…"
-            @keyup.enter="doSearch"
-          />
+          <SearchBox v-model="keyword" scope="sites" placeholder="跨站搜索片名…" @keyup.enter="doSearch" />
         </div>
-        <button
-          class="b-none btn btn-primary text-sm px-4 shrink-0"
-          :disabled="searching"
-          @click="doSearch"
-        >
+        <button class="b-none btn btn-primary text-sm px-4 shrink-0" :disabled="searching" @click="doSearch">
           <span v-if="searching" class="i-carbon-circle-dash animate-spin" />
           {{ searching ? "搜索中" : "搜索" }}
         </button>
@@ -233,63 +213,38 @@ const grouped = computed(() => {
           “<span class="text-gray-200">{{ keyword }}</span>” 共
           {{ searchList.length }} 条结果
         </p>
-        <button
-          class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]"
-          @click="clearSearch"
-        >
+        <button class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11]" @click="clearSearch">
           返回浏览
         </button>
       </div>
 
-      <p
-        v-if="!searchList.length && !searching"
-        class="text-center text-gray-500 py-16"
-      >
+      <p v-if="!searchList.length && !searching" class="text-center text-gray-500 py-16">
         没有找到相关内容
       </p>
 
       <div v-else class="space-y-7">
         <section v-for="g in grouped" :key="g.key">
           <h3 class="flex items-center gap-2 mb-3 text-sm text-gray-400">
-            <span
-              class="w-1 h-3.5 rounded-full bg-gradient-to-b from-indigo-400 to-violet-500"
-            />
+            <span class="w-1 h-3.5 rounded-full bg-gradient-to-b from-indigo-400 to-violet-500" />
             {{ g.name }}
             <span class="text-[11px] text-gray-600 tabular-nums">
               {{ g.items.length }}
             </span>
           </h3>
-          <div
-            class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 md:gap-4"
-          >
-            <RouterLink
-              v-for="it in g.items"
-              :key="g.key + '-' + it.vod_id"
-              :to="{
-                name: 'site-detail',
-                query: { site: g.key, id: it.vod_id },
-              }"
-              class="group card glass-hover hover:-translate-y-1.5 duration-300 ease-out"
-            >
+          <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 md:gap-4">
+            <RouterLink v-for="it in g.items" :key="g.key + '-' + it.vod_id" :to="{
+              name: 'site-detail',
+              query: { site: g.key, id: it.vod_id },
+            }" class="group card glass-hover hover:-translate-y-1.5 duration-300 ease-out">
               <div class="relative aspect-[3/4] overflow-hidden bg-white/5">
-                <img
-                  v-if="it.vod_pic"
-                  :src="it.vod_pic"
-                  :alt="it.vod_name"
-                  loading="lazy"
+                <img v-if="it.vod_pic" :src="it.vod_pic" :alt="it.vod_name" loading="lazy"
                   class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  referrerpolicy="no-referrer"
-                />
-                <div
-                  v-else
-                  class="w-full h-full flex items-center justify-center text-gray-600 text-xs"
-                >
+                  referrerpolicy="no-referrer" />
+                <div v-else class="w-full h-full flex items-center justify-center text-gray-600 text-xs">
                   暂无封面
                 </div>
-                <span
-                  v-if="it.vod_remarks"
-                  class="absolute left-2 bottom-2 max-w-[calc(100%-1rem)] px-2 py-1 rounded-md text-[11px] leading-tight text-gray-100 bg-black/65 backdrop-blur-md truncate"
-                >
+                <span v-if="it.vod_remarks"
+                  class="absolute left-2 bottom-2 max-w-[calc(100%-1rem)] px-2 py-1 rounded-md text-[11px] leading-tight text-gray-100 bg-black/65 backdrop-blur-md truncate">
                   {{ it.vod_remarks }}
                 </span>
               </div>
@@ -307,42 +262,23 @@ const grouped = computed(() => {
     <!-- 正常浏览 -->
     <template v-else>
       <!-- 分类 -->
-      <div
-        v-if="classes.length"
-        class="flex items-center gap-2 overflow-x-auto pb-3 mb-4"
-      >
-        <button
-          class="b-none chip"
-          :class="!tid ? 'chip-active' : 'chip-idle'"
-          @click="pickClass('')"
-        >
+      <div v-if="classes.length" class="flex items-center gap-2 overflow-x-auto pb-3 mb-4">
+        <button class="b-none chip" :class="!tid ? 'chip-active' : 'chip-idle'" @click="pickClass('')">
           全部
         </button>
-        <button
-          v-for="c in classes"
-          :key="c.type_id"
-          class="b-none chip"
-          :class="c.type_id === tid ? 'chip-active' : 'chip-idle'"
-          @click="pickClass(c.type_id)"
-        >
+        <button v-for="c in classes" :key="c.type_id" class="b-none chip"
+          :class="c.type_id === tid ? 'chip-active' : 'chip-idle'" @click="pickClass(c.type_id)">
           {{ c.type_name }}
         </button>
       </div>
 
-      <VodGrid :list="list" :loading="listLoading" :skeleton="21" />
+      <VodGrid :list="list" :loading="listLoading" :skeleton="21" :site="siteKey" />
 
-      <p
-        v-if="!listLoading && !list.length && !error"
-        class="text-center text-gray-500 py-16"
-      >
+      <p v-if="!listLoading && !list.length && !error" class="text-center text-gray-500 py-16">
         该站点暂无内容
       </p>
 
-      <PagerBar
-        v-if="tid && list.length"
-        :page="page"
-        @change="changePage"
-      />
+      <PagerBar v-if="tid && list.length" :page="page" @change="changePage" />
     </template>
 
     <p v-if="loading" class="text-center text-gray-500 py-16">加载中…</p>
