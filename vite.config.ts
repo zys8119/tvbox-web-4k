@@ -24,8 +24,9 @@ export default defineConfig({
       "/api": {
         target: process.env.VITE_API_TARGET ?? "http://127.0.0.1:3001",
         changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api/, ""),
+        rewrite: (p: string) => p.replace(/^\/api/, ""),
       },
     },
+    allowedHosts: true,
   },
 });

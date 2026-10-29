@@ -9,7 +9,7 @@
     "pnpm": ">=9.1.1"
   },
   "scripts": {
-    "dev": "vite & tsx watch server/main.ts",
+    "dev": "vite --host & tsx watch server/main.ts",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview"
   },
