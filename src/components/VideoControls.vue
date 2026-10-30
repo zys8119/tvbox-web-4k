@@ -3,6 +3,9 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Capacitor } from "@capacitor/core";
 import { ScreenOrientation } from "@capgo/capacitor-screen-orientation";
 
+/** 当前是否为原生平台（App 模式）：改变画面点击/双击交互语义 */
+const IS_NATIVE = Capacitor.isNativePlatform();
+
 /**
  * 自定义播放器控制条（替代原生 controls）。
  *
@@ -53,6 +56,15 @@ let gesture:
   | null = null;
 /** 到该时间戳为止忽略 click（滑动后释放产生的 click 不触发播放暂停） */
 let suppressClickUntil = 0;
+
+/* ---- App 模式单击/双击判定 ---- */
+
+/** 单击判定窗口（毫秒）：窗口内再次点击视为双击 */
+const TAP_TIMEOUT = 250;
+/** 单击延迟确认计时器（App 模式：单击延迟后切换控制条显隐，双击取消该动作） */
+let tapTimer: ReturnType<typeof setTimeout> | undefined;
+/** 上一次点击时间戳，用于双击判定 */
+let lastTapAt = 0;
 
 /** 视频画面缩放：scale 1..4，scale > 1 时单指拖动为平移可视区域 */
 const scale = ref(1);
@@ -776,6 +788,16 @@ function onWindowBlur() {
   stopSeekHold();
 }
 
+/** 单击画面：切换控制条显示/隐藏（App 模式） */
+function toggleBars() {
+  if (visible.value) {
+    clearTimeout(hideTimer);
+    visible.value = false;
+  } else {
+    poke();
+  }
+}
+
 function onVideoClick(e: MouseEvent) {
   // 控件锁定：画面点击无效（防误触）
   if (locked.value) return;
@@ -783,12 +805,34 @@ function onVideoClick(e: MouseEvent) {
   if (e.target !== props.video) return;
   // 滑动手势结束后 300ms 内产生的 click 忽略（滑动已 handled）
   if (Date.now() < suppressClickUntil) return;
-  togglePlay();
+  // Web 模式（浏览器）：单击切换播放/暂停，维持原有交互
+  if (!IS_NATIVE) {
+    togglePlay();
+    return;
+  }
+  // App 模式：250ms 内再次点击判为双击 → 播放/暂停；
+  // 单次点击延迟确认后切换控制条显隐（避免双击误先隐藏控制条）
+  const now = Date.now();
+  if (now - lastTapAt < TAP_TIMEOUT) {
+    clearTimeout(tapTimer);
+    lastTapAt = 0;
+    togglePlay();
+    return;
+  }
+  lastTapAt = now;
+  clearTimeout(tapTimer);
+  tapTimer = setTimeout(() => {
+    lastTapAt = 0;
+    toggleBars();
+  }, TAP_TIMEOUT);
 }
 
 function onVideoDblClick(e: MouseEvent) {
   if (locked.value) return;
   if (e.target !== props.video) return;
+  // App 模式：双击播放/暂停已由 click 时间窗口统一处理，此处避免二次触发
+  if (IS_NATIVE) return;
+  // Web 模式：双击全屏
   toggleFs();
 }
 
@@ -936,6 +980,7 @@ onBeforeUnmount(() => {
   clearTimeout(hideTimer);
   clearTimeout(osdTimer);
   clearTimeout(rateOpenTimer);
+  clearTimeout(tapTimer);
   stopSeekHold();
 });
 </script>
