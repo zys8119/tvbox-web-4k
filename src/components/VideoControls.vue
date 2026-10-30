@@ -476,11 +476,51 @@ function toggleFs() {
   }
 }
 
+/**
+ * 进入全屏：系统栏（状态栏 + 导航栏）透明悬浮在画面之上，界面真正全屏。
+ * 原生平台通过 StatusBar 插件将 WebView 内容延伸到系统栏后面、状态栏背景透明化；
+ * Android 15+ 本身强制 edge-to-edge（系统栏半透明悬浮），此设置保持行为一致。
+ */
+async function enterImmersive() {
+  try {
+    if (!Capacitor.isNativePlatform()) return;
+    await StatusBar.setOverlaysWebView({ overlay: true });
+    await StatusBar.setStyle({ style: Style.Light });
+    await StatusBar.setBackgroundColor({ color: "#00000000" });
+  } catch {
+    /* 插件不可用/低版本环境失败时忽略 */
+  }
+}
+
+/** 退出全屏：取消 WebView 对系统栏的覆盖，恢复系统栏默认呈现 */
+async function exitImmersive() {
+  try {
+    if (!Capacitor.isNativePlatform()) return;
+    await StatusBar.setOverlaysWebView({ overlay: false });
+  } catch {
+    /* 忽略 */
+  }
+}
+
+/** 复位画面缩放/平移（退出全屏、切换视频时调用） */
+function resetZoom() {
+  scale.value = 1;
+  offsetX.value = 0;
+  offsetY.value = 0;
+  applyTransform(props.video, true);
+}
+
 function onFsChange() {
   const isFs = !!document.fullscreenElement;
   fs.value = isFs;
-  if (isFs) lockLandscape();
-  else unlockOrientation();
+  if (isFs) {
+    lockLandscape();
+    enterImmersive();
+  } else {
+    unlockOrientation();
+    exitImmersive();
+    resetZoom();
+  }
   poke();
 }
 
@@ -617,10 +657,30 @@ function onTouchStart(e: TouchEvent) {
 }
 
 function onTouchMove(e: TouchEvent) {
+  // 双指及以上：交由捏合缩放手势处理（平移/电量等单指手势让位）
+  if (e.touches.length >= 2) {
+    handlePinchMove(e);
+    return;
+  }
   if (!gesture || e.touches.length !== 1) return;
   const t = e.touches[0];
   const dx = t.clientX - gesture.startX;
   const dy = t.clientY - gesture.startY;
+  // 画面已放大：单指拖动为平移可视区域（仅在有放大余量时生效）
+  if (gesture.pan) {
+    e.preventDefault();
+    poke();
+    const el = props.video;
+    if (!el) return;
+    const rx = (el.clientWidth * scale.value - el.clientWidth) / 2;
+    const ry = (el.clientHeight * scale.value - el.clientHeight) / 2;
+    if (rx > 0 || ry > 0) {
+      offsetX.value = Math.max(-rx, Math.min(rx, gesture.startOffsetX + dx));
+      offsetY.value = Math.max(-ry, Math.min(ry, gesture.startOffsetY + dy));
+      applyTransform(el);
+    }
+    return;
+  }
   // 未锁定方向时按斜率判定，并设置 10px 起步阈值避免轻触误判
   if (!gesture.dir) {
     if (Math.max(Math.abs(dx), Math.abs(dy)) < 10) return;
@@ -660,6 +720,8 @@ function onTouchEnd() {
   // 发生过滑动：抑制随后产生的 click，避免误触发播放暂停
   if (gesture && gesture.dir) suppressClickUntil = Date.now() + 300;
   gesture = null;
+  // 双指捏合结束（任一指离开）：复位捏合状态，后续单指回落为点击/平移
+  pinch = null;
 }
 
 /* ============================== 键盘快捷键 ============================== */
@@ -804,6 +866,11 @@ function onReset() {
   previewImg.value = "";
   previewSeekBusy = false;
   lastPreviewApplied = -1;
+  // 切换视频/清空时复位画面缩放与平移
+  scale.value = 1;
+  offsetX.value = 0;
+  offsetY.value = 0;
+  applyTransform(props.video);
   clearTimeout(hideTimer);
 }
 
