@@ -487,8 +487,12 @@ function toggleFs() {
   const w = props.wrap;
   if (!w) return;
   if (document.fullscreenElement) {
+    // 先恢复系统栏，再退出全屏，避免退出瞬间界面跳动
+    showSystemBars();
     document.exitFullscreen().catch(() => { });
   } else {
+    // 先隐藏系统栏，再进入全屏：规避 WebView custom view 切换瞬间系统重显状态栏
+    hideSystemBars();
     w.requestFullscreen().then(lockLandscape).catch(() => { });
   }
 }
