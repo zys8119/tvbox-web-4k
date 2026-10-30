@@ -452,11 +452,14 @@ async function lockLandscape() {
   }
 }
 
-/** 解除方向锁定，恢复系统自动旋转 */
-async function unlockOrientation() {
+/**
+ * 退出全屏：恢复竖屏模式。App 为竖屏界面，原生平台调用插件锁定 portrait
+ * （SENSOR_PORTRAIT，0°/180° 跟随重力）；Web 环境解除方向锁定即可。
+ */
+async function restorePortrait() {
   try {
     if (Capacitor.isNativePlatform()) {
-      await ScreenOrientation.unlock();
+      await ScreenOrientation.lock({ orientation: "portrait" });
     } else {
       const so = screen.orientation as ScreenOrientationExt | null;
       if (so && typeof so.unlock === "function") so.unlock();
@@ -517,7 +520,7 @@ function onFsChange() {
     lockLandscape();
     enterImmersive();
   } else {
-    unlockOrientation();
+    restorePortrait();
     exitImmersive();
     resetZoom();
   }
@@ -953,6 +956,8 @@ onBeforeUnmount(() => {
     props.wrap.removeEventListener("mousemove", onWrapMove);
     props.wrap.removeEventListener("mouseleave", onWrapLeave);
   }
+  // 卸载兜底：若停留横屏则恢复竖屏
+  restorePortrait();
   clearTimeout(hideTimer);
   clearTimeout(osdTimer);
   clearTimeout(rateOpenTimer);
