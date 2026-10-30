@@ -2,6 +2,7 @@ import { createApp } from "vue";
 import { createRouter, createWebHistory } from "vue-router";
 import "virtual:uno.css";
 import "./style.css";
+import { startEmbeddedBackend, useEmbeddedBackend } from "./capacitor";
 import App from "./App.vue";
 import Home from "./views/Home.vue";
 import Category from "./views/Category.vue";
@@ -34,4 +35,11 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 });
 
-createApp(App).use(router).mount("#app");
+async function bootstrap(): Promise<void> {
+  if (useEmbeddedBackend()) {
+    await startEmbeddedBackend();
+  }
+  createApp(App).use(router).mount("#app");
+}
+
+void bootstrap();

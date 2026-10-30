@@ -1,6 +1,6 @@
 /** 后端 Node 服务（node/main.ts）的接口封装 */
 
-const BASE = "/api";
+const BASE: string = import.meta.env.VITE_API_BASE ?? "/api";
 
 export interface VodItem {
   vod_id: string;

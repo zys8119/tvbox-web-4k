@@ -28,27 +28,6 @@ defineSlots<{
   extras(props: { fs: boolean }): any;
 }>();
 
-/** 事件：全屏状态下点击左上角返回键（由父页面退出全屏并返回上一页） */
-const emit = defineEmits<{ (e: "back"): void }>();
-
-/** 触屏设备（原生 App / 移动端浏览器）：播放交互切换为触摸手势 */
-const isTouch =
-  typeof window !== "undefined" &&
-  (window.matchMedia?.("(pointer: coarse)").matches ||
-    "ontouchstart" in window ||
-    navigator.maxTouchPoints > 0);
-
-/** 触控手势状态 */
-let touchStartX = 0;
-let touchStartY = 0;
-let touchStartT = 0;
-/** 上一次点击（tap）的时间戳，用于双击判定 */
-let lastTapAt = 0;
-/** 到该时间戳为止忽略 click/dblclick（触控手势已处理，避免模拟点击重复触发） */
-let suppressClickUntil = 0;
-/** 单击动作延迟执行定时器（等待双击判定，避免误触发） */
-let tapTimer: ReturnType<typeof setTimeout> | undefined;
-
 const playing = ref(false);
 const ready = ref(false);
 const currentTime = ref(0);
