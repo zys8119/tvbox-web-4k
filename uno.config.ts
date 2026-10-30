@@ -12,6 +12,11 @@ export default defineConfig({
     presetUno(),
     presetAttributify(),
     presetIcons({
+      // 显式声明本地图标集，规避 presetIcons 在 VSCODE 环境（VSCODE_CWD 存在）下
+      // 跳过 node loader 导致构建产物缺失图标样式的问题
+      collections: {
+        carbon: () => import("@iconify-json/carbon").then((m) => m.icons),
+      },
       scale: 1.2,
       warn: false,
       extraProperties: {

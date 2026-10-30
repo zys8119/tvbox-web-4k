@@ -532,7 +532,7 @@ onBeforeUnmount(() => {
                   ? '点击取消片尾标记（当前 ' + fmtTime(marks.outro) + '）'
                   : '点击记录当前播放位置为片尾'
                   " @click="toggleOutro">
-                <span class="i-carbon-skip-backward text-[10px]" />
+                <span class="i-carbon-skip-back text-[10px]" />
                 {{ outroLabel }}
               </button>
               <button v-if="vodKey && marks.intro > 0"
@@ -555,7 +555,7 @@ onBeforeUnmount(() => {
               <!-- 简介：打开影片详情弹层 -->
               <button v-if="detail" class="b-none btn text-xs px-2.5 py-1 bg-white/10 hover:bg-white/20 text-gray-200"
                 title="简介" @click="showIntro = true">
-                <span class="i-carbon-document-text text-[10px]" />
+                <span class="i-carbon-document text-[10px]" />
                 简介
               </button>
               <!-- 收藏：加入/取消收藏（全屏与页内均可用） -->
@@ -627,7 +627,7 @@ onBeforeUnmount(() => {
               ? '点击取消片尾标记（当前 ' + fmtTime(marks.outro) + '）'
               : '点击记录当前播放位置为片尾'
               " @click="toggleOutro">
-            <span class="i-carbon-skip-backward text-[10px]" />
+            <span class="i-carbon-skip-back text-[10px]" />
             {{ outroLabel }}
           </button>
 

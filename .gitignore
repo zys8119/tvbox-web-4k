@@ -53,4 +53,25 @@ tsconfig.tsbuildinfo
 
 *.db
 
-server/data/
+tvbox-web-4k.apk
+
+# Android (Capacitor/Gradle) 构建产物
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/build/
+android/app/src/main/assets/public/
+android/local.properties
+android/*.iml
+android/.idea/
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+*.hprof
+
+# SQLite 运行时文件（.db 见上方）
+*.db-shm
+*.db-wal
+
+# Java 桥接层编译产物
+server/jarbridge/build/
