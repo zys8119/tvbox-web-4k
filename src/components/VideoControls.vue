@@ -5,12 +5,13 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
  * 自定义播放器控制条（替代原生 controls）。
  *
  * 特性：
- * - 按钮化控制：播放/暂停、进度拖拽、音量、全屏；
+ * - 按钮化控制：播放/暂停、进度拖拽、音量、倍速（1x/1.5x/1.7x/2x/2.5x/2.7x/3x/4x/5x）、全屏；
  * - 显隐策略：鼠标悬浮时显示、闲置 2.6s 后自动隐藏、鼠标离开播放器立即隐藏（仅播放时），
  *   暂停时保持显示；全屏下鼠标活动立即显示、闲置自动隐藏；
- * - 键盘快捷键：Space/K 播放暂停，←/→ 快退/快进 5s，↑/↓ 音量，M 静音，F 全屏（输入框内不生效）；
+ * - 键盘快捷键：Space/K 播放暂停，←/→ 快退/快进 5s（长按持续快退/快进），↑/↓ 音量，M 静音，F 全屏（输入框内不生效）；
+ * - 中心 OSD：音量、进度、倍速变化时视频中心临时显示当前数值，操作停止后自动消失；
  * - 全屏：对包含 video 的容器元素（wrap）请求全屏，控制条随容器一起全屏展示；
- * - 可插拔：通过 #top / #extras 插槽接入扩展按钮（片头片尾标记、自动连播、画面裁切等），
+ * - 可插拔：通过 #top / #extras 插槽接入扩展按钮（片头片尾标记、自动连播、画面裁切、选集等），
  *   第三方插件也可直接对 video 元素挂载（事件监听均附加在 video 元素上，互不冲突）。
  */
 const props = defineProps<{
@@ -39,10 +40,41 @@ const visible = ref(false);
 const seeking = ref(false);
 /** 拖拽预览位置（0..1） */
 const seekPos = ref(0);
+/** 拖拽进度前视频是否在播放（拖拽结束后恢复） */
+const wasPlaying = ref(false);
+/** 拖拽中实时显示的时间点（秒） */
+const dragTime = ref(0);
+/** 拖拽中捕获的关键帧预览图（dataURL；跨域受限或内容异常时为空） */
+const previewImg = ref("");
+/** 关键帧预览是否可用（捕获失败自动关闭，仅保留时间点显示） */
+const previewOk = ref(true);
+/** 预览浮层水平位置（clamp 防止贴边溢出） */
+const thumbLeft = computed(() => `${Math.min(86, Math.max(14, seekPos.value * 100))}%`);
 
 const barEl = ref<HTMLDivElement | null>(null);
 
+/** 播放倍速档位：点击循环切换 */
+const RATES = [1, 1.5, 1.7, 2, 2.5, 2.7, 3, 4, 5] as const;
+/** 当前倍速 */
+const rate = ref<number>(1);
+
+/** 视频中心临时提示（音量/进度/倍速变化时显示，停止操作后自动消失） */
+const osdText = ref("");
+const osdVisible = ref(false);
+
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
+let osdTimer: ReturnType<typeof setTimeout> | undefined;
+/** 方向键长按持续快进/快退的状态 */
+let seekHold: "left" | "right" | null = null;
+let seekTimer: ReturnType<typeof setInterval> | undefined;
+/** 关键帧捕获画布（惰性创建，320x180） */
+let thumbCanvas: HTMLCanvasElement | null = null;
+/** 是否正在执行捕获态跳转（同一时刻仅允许一次） */
+let previewSeekBusy = false;
+/** 上一次实际应用的捕获时间点（秒） */
+let lastPreviewApplied = -1;
+/** 拖拽期间最新的目标时间点 */
+const previewTarget = { t: 0 };
 
 /** 当前播放进度比例（0..1），拖拽预览优先 */
 const played = computed(() => {
@@ -59,6 +91,87 @@ function fmtTime(sec: number): string {
   const ss = s % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(ss)}` : `${pad(m)}:${pad(ss)}`;
+}
+
+/* ============================== 中心 OSD 提示 ============================== */
+
+/** 在视频中心临时提示数值，操控停止后（900ms）自动消失 */
+function showOsd(text: string) {
+  osdText.value = text;
+  osdVisible.value = true;
+  clearTimeout(osdTimer);
+  osdTimer = setTimeout(() => {
+    osdVisible.value = false;
+  }, 900);
+}
+
+/** 按增量（秒）跳转进度并提示当前时间；负数表示快退 */
+function seekBy(delta: number) {
+  const el = props.video;
+  if (!el) return;
+  el.currentTime = Math.min(Math.max(0, el.currentTime + delta), el.duration || 0);
+  showOsd(fmtTime(el.currentTime));
+}
+
+/** 方向键长按：开始持续快进/快退（间隔 200ms） */
+function beginSeekHold(dir: "left" | "right") {
+  seekHold = dir;
+  seekBy(dir === "left" ? -5 : 5);
+  clearInterval(seekTimer);
+  seekTimer = setInterval(() => seekBy(dir === "left" ? -5 : 5), 200);
+}
+
+function endSeekHold(dir: "left" | "right") {
+  if (seekHold !== dir) return;
+  seekHold = null;
+  clearInterval(seekTimer);
+  seekTimer = undefined;
+}
+
+function stopSeekHold() {
+  seekHold = null;
+  clearInterval(seekTimer);
+  seekTimer = undefined;
+}
+
+/** 循环切换播放倍速：1x / 1.5x / 1.7x / 2x / 2.5x / 2.7x / 3x / 4x / 5x */
+function cycleRate() {
+  const el = props.video;
+  if (!el) return;
+  const i = RATES.indexOf(rate.value as (typeof RATES)[number]);
+  rate.value = RATES[(i + 1) % RATES.length];
+  el.playbackRate = rate.value;
+  showOsd(`倍速 ${rate.value}x`);
+}
+
+/* ============================== 倍速下拉 ============================== */
+
+/** 倍速下拉是否展开（悬浮展开，点击选项直接切换） */
+const rateOpen = ref(false);
+let rateOpenTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** 直接设置指定倍速 */
+function setRate(r: (typeof RATES)[number]) {
+  const el = props.video;
+  if (!el) return;
+  rate.value = r;
+  el.playbackRate = r;
+  showOsd(`倍速 ${r}x`);
+  rateOpen.value = false;
+}
+
+/** 悬浮在倍速控件上：展开全部档位（微延迟，避免误触） */
+function openRate() {
+  clearTimeout(rateOpenTimer);
+  rateOpenTimer = setTimeout(() => {
+    rateOpen.value = true;
+  }, 200);
+}
+
+/** 离开倍速控件：收起下拉 */
+function closeRate() {
+  clearTimeout(rateOpenTimer);
+  rateOpen.value = false;
 }
 
 /* ============================== 显隐控制 ============================== */
@@ -98,12 +211,76 @@ function onSeekDown(e: PointerEvent) {
   seeking.value = true;
   (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
   seekPos.value = ratioFromEvent(e);
+  const el = props.video;
+  if (el) {
+    // 冻结播放态：拖拽期间暂停以便稳定捕获关键帧，结束后按原状态恢复
+    wasPlaying.value = !el.paused;
+    el.pause();
+  }
+  requestPreview();
   poke();
 }
 
 function onSeekMove(e: PointerEvent) {
   if (!seeking.value) return;
   seekPos.value = ratioFromEvent(e);
+  requestPreview();
+}
+
+/* ============================== 拖拽关键帧预览 / 实时时间点 ============================== */
+
+/** 取 video 当前帧绘制到缩略图画布（cover 居中裁切）；跨域受限等异常则关闭预览能力 */
+function capturePreviewFrame() {
+  const el = props.video;
+  if (!el) return;
+  try {
+    if (!thumbCanvas) {
+      thumbCanvas = document.createElement("canvas");
+      thumbCanvas.width = 320;
+      thumbCanvas.height = 180;
+    }
+    const ctx = thumbCanvas.getContext("2d");
+    if (!ctx || el.videoWidth <= 0 || el.videoHeight <= 0) return;
+    const scale = Math.max(thumbCanvas.width / el.videoWidth, thumbCanvas.height / el.videoHeight);
+    const dw = el.videoWidth * scale;
+    const dh = el.videoHeight * scale;
+    ctx.drawImage(el, (thumbCanvas.width - dw) / 2, (thumbCanvas.height - dh) / 2, dw, dh);
+    previewImg.value = thumbCanvas.toDataURL("image/jpeg", 0.72);
+  } catch {
+    // canvas 被跨域污染（SecurityError）等情况：关闭预览，仅保留时间点显示
+    previewOk.value = false;
+    previewImg.value = "";
+  }
+}
+
+/** 拖拽期间按 seekPos 请求捕获关键帧（节流：一次 capture seek 进行中则跳过，seeked 后追帧） */
+function requestPreview() {
+  const el = props.video;
+  if (!el || !seeking.value) return;
+  const dur = el.duration;
+  if (!Number.isFinite(dur) || dur <= 0) return;
+  dragTime.value = Math.min(Math.max(0, seekPos.value * dur), dur);
+  if (!previewOk.value) return;
+  if (Math.abs(dragTime.value - lastPreviewApplied) < 0.1) return;
+  previewTarget.t = dragTime.value;
+  if (previewSeekBusy) return;
+  previewSeekBusy = true;
+  lastPreviewApplied = dragTime.value;
+  el.currentTime = dragTime.value;
+}
+
+/** seeked：捕获当前帧；拖拽期间目标在持续移动时继续追帧，实现连续预览 */
+function onSeeked() {
+  if (!seeking.value || !previewOk.value) return;
+  const el = props.video;
+  if (!el) return;
+  capturePreviewFrame();
+  previewSeekBusy = false;
+  if (seeking.value && Math.abs(previewTarget.t - lastPreviewApplied) >= 0.1) {
+    previewSeekBusy = true;
+    lastPreviewApplied = previewTarget.t;
+    el.currentTime = previewTarget.t;
+  }
 }
 
 function onSeekUp() {
@@ -112,7 +289,12 @@ function onSeekUp() {
   const el = props.video;
   if (el && Number.isFinite(el.duration) && el.duration > 0) {
     el.currentTime = seekPos.value * el.duration;
+    if (wasPlaying.value) el.play().catch(() => { });
+    showOsd(fmtTime(el.currentTime));
   }
+  previewImg.value = "";
+  previewSeekBusy = false;
+  lastPreviewApplied = -1;
   poke();
 }
 
@@ -124,12 +306,17 @@ function onVolumeInput(e: Event) {
   const v = Number((e.target as HTMLInputElement).value);
   el.volume = v;
   el.muted = v === 0;
+  volume.value = v;
+  muted.value = v === 0;
+  showOsd(el.muted ? "静音" : `音量 ${Math.round(v * 100)}%`);
 }
 
 function toggleMute() {
   const el = props.video;
   if (!el) return;
   el.muted = !el.muted;
+  muted.value = el.muted;
+  showOsd(el.muted ? "静音" : `音量 ${Math.round(el.volume * 100)}%`);
 }
 
 /* ============================== 全屏 ============================== */
@@ -167,8 +354,8 @@ function onWrapLeave() {
 /* ============================== 键盘快捷键 ============================== */
 
 /**
- * 全局播放快捷键：Space/K 播放暂停，←/→ 快退/快进 5s，↑/↓ 音量，M 静音，F 全屏。
- * 输入框/文本编辑态以及带修饰键（Ctrl/⌘/Alt）的按键不拦截。
+ * 全局播放快捷键：Space/K 播放暂停，←/→ 快退/快进 5s（长按持续），↑/↓ 音量（中心 OSD 提示），
+ * M 静音，F 全屏。输入框/文本编辑态以及带修饰键（Ctrl/⌘/Alt）的按键不拦截。
  */
 function onKeydown(e: KeyboardEvent) {
   const el = e.target as HTMLElement | null;
@@ -180,6 +367,8 @@ function onKeydown(e: KeyboardEvent) {
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
   const v = props.video;
   if (!v) return;
+  // 选集弹层打开时不响应播放快捷键（选集弹层自身处理 Esc 关闭）
+  if (document.querySelector(".ep-picker-open")) return;
   const k = e.key.toLowerCase();
   switch (k) {
     case " ":
@@ -189,13 +378,11 @@ function onKeydown(e: KeyboardEvent) {
       break;
     case "arrowleft":
       e.preventDefault();
-      v.currentTime = Math.max(0, v.currentTime - 5);
-      poke();
+      if (!e.repeat) beginSeekHold("left");
       break;
     case "arrowright":
       e.preventDefault();
-      v.currentTime = Math.min(v.duration || 0, v.currentTime + 5);
-      poke();
+      if (!e.repeat) beginSeekHold("right");
       break;
     case "arrowup":
       e.preventDefault();
@@ -203,6 +390,7 @@ function onKeydown(e: KeyboardEvent) {
       v.volume = Math.min(1, v.volume + 0.1);
       volume.value = v.volume;
       muted.value = false;
+      showOsd(`音量 ${Math.round(v.volume * 100)}%`);
       break;
     case "arrowdown":
       e.preventDefault();
@@ -210,6 +398,7 @@ function onKeydown(e: KeyboardEvent) {
       v.muted = v.volume === 0;
       volume.value = v.volume;
       muted.value = v.volume === 0;
+      showOsd(v.muted ? "静音" : `音量 ${Math.round(v.volume * 100)}%`);
       break;
     case "m":
       e.preventDefault();
@@ -220,6 +409,18 @@ function onKeydown(e: KeyboardEvent) {
       toggleFs();
       break;
   }
+}
+
+/** 松开方向键：结束长按快进/快退 */
+function onKeyup(e: KeyboardEvent) {
+  const k = e.key.toLowerCase();
+  if (k === "arrowleft") endSeekHold("left");
+  else if (k === "arrowright") endSeekHold("right");
+}
+
+/** 窗口失焦：兜底结束长按，避免快进/快退持续执行 */
+function onWindowBlur() {
+  stopSeekHold();
 }
 
 function onVideoClick() {
@@ -251,6 +452,7 @@ function onLoadedMetadata() {
   currentTime.value = el.currentTime || 0;
   volume.value = el.volume;
   muted.value = el.muted;
+  rate.value = el.playbackRate || 1;
   ready.value = true;
   poke();
 }
@@ -278,6 +480,9 @@ function onReset() {
   duration.value = 0;
   buffered.value = 0;
   seeking.value = false;
+  previewImg.value = "";
+  previewSeekBusy = false;
+  lastPreviewApplied = -1;
   clearTimeout(hideTimer);
 }
 
@@ -289,6 +494,7 @@ function attachEvents(el: HTMLVideoElement) {
   el.addEventListener("play", onPlay);
   el.addEventListener("pause", onPause);
   el.addEventListener("ended", onEnded_);
+  el.addEventListener("seeked", onSeeked);
   el.addEventListener("click", onVideoClick);
   el.addEventListener("dblclick", onVideoDblClick);
 }
@@ -301,6 +507,7 @@ function detachEvents(el: HTMLVideoElement) {
   el.removeEventListener("play", onPlay);
   el.removeEventListener("pause", onPause);
   el.removeEventListener("ended", onEnded_);
+  el.removeEventListener("seeked", onSeeked);
   el.removeEventListener("click", onVideoClick);
   el.removeEventListener("dblclick", onVideoDblClick);
 }
@@ -334,16 +541,23 @@ watch(
 
 document.addEventListener("fullscreenchange", onFsChange);
 document.addEventListener("keydown", onKeydown);
+document.addEventListener("keyup", onKeyup);
+window.addEventListener("blur", onWindowBlur);
 
 onBeforeUnmount(() => {
   document.removeEventListener("fullscreenchange", onFsChange);
   document.removeEventListener("keydown", onKeydown);
+  document.removeEventListener("keyup", onKeyup);
+  window.removeEventListener("blur", onWindowBlur);
   if (props.video) detachEvents(props.video);
   if (props.wrap) {
     props.wrap.removeEventListener("mousemove", onWrapMove);
     props.wrap.removeEventListener("mouseleave", onWrapLeave);
   }
   clearTimeout(hideTimer);
+  clearTimeout(osdTimer);
+  clearTimeout(rateOpenTimer);
+  stopSeekHold();
 });
 </script>
 
@@ -366,6 +580,14 @@ onBeforeUnmount(() => {
       <span class="i-carbon-play-filled text-3xl ml-1" />
     </button>
 
+    <!-- 视频中心临时提示：音量 / 进度 / 倍速变化时显示，停止操作后自动消失 -->
+    <div class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+      <div v-if="osdVisible"
+        class="whitespace-nowrap rounded-xl bg-black/60 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm shadow-lg">
+        {{ osdText }}
+      </div>
+    </div>
+
     <!-- 底部控制条 -->
     <div
       class="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-2 pt-10 bg-gradient-to-t from-black/70 via-black/30 to-transparent transition-opacity duration-300"
@@ -378,9 +600,16 @@ onBeforeUnmount(() => {
           <span :class="playing ? 'i-carbon-pause text-lg' : 'i-carbon-play-filled text-lg ml-0.5'" />
         </button>
 
-        <!-- 进度条（点击/拖拽定位） -->
+        <!-- 进度条（点击/拖拽定位；拖拽时实时预览时间点与关键帧） -->
         <div ref="barEl" class="pointer-events-auto group/bar relative flex h-4 flex-1 cursor-pointer items-center py-2"
           @pointerdown="onSeekDown" @pointermove="onSeekMove" @pointerup="onSeekUp" @pointercancel="onSeekUp">
+          <!-- 拖拽实时浮层：当前时间点 + 关键帧预览（跨域受限时仅显示时间） -->
+          <div v-if="seeking" :style="{ left: thumbLeft }"
+            class="pointer-events-none absolute bottom-5 left-0 z-20 -translate-x-1/2 flex flex-col items-center gap-1 rounded-lg bg-black/85 px-2 py-1.5 shadow-xl">
+            <img v-if="previewImg" :src="previewImg" alt=""
+              class="h-[72px] w-[128px] rounded-md border border-white/15 object-cover" />
+            <span class="text-[11px] font-medium tabular-nums text-white">{{ fmtTime(dragTime) }}</span>
+          </div>
           <div
             class="relative h-1 w-full overflow-hidden rounded-full bg-white/20 transition-all group-hover/bar:h-1.5 group-active/bar:h-1.5">
             <div class="absolute inset-y-0 left-0 bg-white/30" :style="{ width: buffered * 100 + '%' }" />
@@ -395,6 +624,24 @@ onBeforeUnmount(() => {
         <span class="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-white/85">
           {{ fmtTime(currentTime) }} / {{ fmtTime(duration) }}
         </span>
+
+        <!-- 倍速：悬浮向上展开全部档位，点击直接切换（点击按钮本身仍可循环切换） -->
+        <div class="pointer-events-auto relative shrink-0" @mouseenter="openRate" @mouseleave="closeRate">
+          <div v-if="rateOpen"
+            class="absolute bottom-full left-1/2 z-30 -translate-x-1/2 flex flex-col gap-0.5 rounded-xl border border-white/10 bg-[#0e1017]/95 p-1 pb-1.5 shadow-2xl backdrop-blur-sm">
+            <button v-for="r in RATES" :key="r"
+              class="b-none w-16 rounded-lg px-3 py-1 text-[11px] tabular-nums transition-colors"
+              :class="r === rate ? 'bg-indigo-500/25 text-indigo-200' : 'text-gray-300 hover:bg-white/10 hover:text-white'"
+              @click="setRate(r)">
+              {{ r }}x
+            </button>
+          </div>
+          <button
+            class="w-10 rounded-full px-2 py-0.5 text-[11px] tabular-nums text-white/85 hover:bg-white/10 hover:text-white transition-colors"
+            :title="`播放速度：当前 ${rate}x（悬浮展开选择，点击循环切换）`" @click="cycleRate">
+            {{ rate }}x
+          </button>
+        </div>
 
         <!-- 扩展按钮插槽（第三方插件/自动连播/裁切/切集等） -->
         <slot name="extras" :fs="fs" />

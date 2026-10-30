@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useRoute, useRouter } from "vue-router";
 import Hls from "hls.js";
 import VideoControls from "../components/VideoControls.vue";
+import EpisodePicker from "../components/EpisodePicker.vue";
 import {
   fetchAutoPlay,
   fetchDetail,
@@ -31,6 +32,8 @@ const title = ref("");
 const vodPic = ref("");
 const vodRemarks = ref("");
 const lines = ref<PlayLine[]>([]);
+/** 是否显示选集弹层（在播放器上悬浮展示剧集列表） */
+const showEpPicker = ref(false);
 
 let hls: Hls | null = null;
 
@@ -465,6 +468,13 @@ onBeforeUnmount(() => {
                 @click="seekTo(marks.outro)">
                 跳片尾
               </button>
+              <!-- 选集：打开剧集弹层（页面与全屏均可用） -->
+              <button v-if="episodes.length"
+                class="b-none btn text-xs px-2.5 py-1 bg-white/10 hover:bg-white/20 text-gray-200" title="选集"
+                @click="showEpPicker = true">
+                <span class="i-carbon-list-boxes text-[10px]" />
+                选集
+              </button>
             </template>
             <template #extras="{ fs }">
               <!-- 自动连播（全屏时可切换，页内由下方工具栏承载） -->
@@ -484,6 +494,11 @@ onBeforeUnmount(() => {
               </button>
             </template>
           </VideoControls>
+
+          <!-- 选集弹层：覆盖播放器展示当前线路剧集 -->
+          <EpisodePicker v-if="showEpPicker && episodes.length" :episodes="episodes" :current-url="playId"
+            :title="currentLine?.from ?? '选集'" @select="(url: string) => { showEpPicker = false; goEp(url, flag); }"
+            @close="showEpPicker = false" />
 
           <div v-if="loading"
             class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-sm text-gray-300">
