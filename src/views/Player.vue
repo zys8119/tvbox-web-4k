@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Hls from "hls.js";
 import {
+  fetchAutoPlay,
   fetchDetail,
   fetchMarks,
   fetchPlay,
@@ -11,6 +12,7 @@ import {
   pushHistory,
   saveMarksApi,
   saveProgressApi,
+  setAutoPlay,
   type Marks,
   type PlayLine,
 } from "../api";
@@ -203,6 +205,57 @@ async function applyResume() {
   }
 }
 
+/* ============================== 自动连播 / 画面裁切 ============================== */
+
+/** 自动播放上下集（与站点播放页共用同一设置） */
+const autoPlay = ref(true);
+
+async function loadAutoPlay() {
+  try {
+    autoPlay.value = (await fetchAutoPlay()).enabled;
+  } catch {
+    autoPlay.value = true;
+  }
+}
+
+async function toggleAutoPlay() {
+  autoPlay.value = !autoPlay.value;
+  try {
+    await setAutoPlay(autoPlay.value);
+  } catch {
+    /* 保存失败不影响本地开关 */
+  }
+}
+
+/** 画面裁切模式列表：cover 裁切铺满 / contain 完整显示 / fill 拉伸填满 / none 原始比例 */
+const FIT_MODES = ["cover", "contain", "fill", "none"] as const;
+type FitMode = (typeof FIT_MODES)[number];
+
+const FIT_LABELS: Record<FitMode, string> = {
+  cover: "裁切",
+  contain: "适应",
+  fill: "拉伸",
+  none: "默认",
+};
+
+function readFit(): FitMode {
+  const v = localStorage.getItem("fit-mode") ?? "";
+  return (FIT_MODES as readonly string[]).includes(v) ? (v as FitMode) : "cover";
+}
+
+const fit = ref<FitMode>(readFit());
+
+/** 点击循环切换裁切模式并持久化 */
+function toggleFit() {
+  const i = FIT_MODES.indexOf(fit.value);
+  fit.value = FIT_MODES[(i + 1) % FIT_MODES.length];
+  try {
+    localStorage.setItem("fit-mode", fit.value);
+  } catch {
+    /* localStorage 不可用时忽略 */
+  }
+}
+
 function destroyHls() {
   if (hls) {
     hls.destroy();
@@ -253,7 +306,7 @@ async function attach(url: string, headers: Record<string, string>) {
     saveProgress();
     const o = marks.value.outro;
     if (o > 0 && el.duration && el.currentTime >= o) {
-      if (nextEp.value) goEp(nextEp.value.url, flag.value);
+      if (autoPlay.value && nextEp.value) goEp(nextEp.value.url, flag.value);
     }
   };
 
@@ -334,8 +387,10 @@ function goBack() {
 }
 
 function onEnded() {
-  if (nextEp.value) goEp(nextEp.value.url, flag.value);
+  if (autoPlay.value && nextEp.value) goEp(nextEp.value.url, flag.value);
 }
+
+onMounted(loadAutoPlay);
 
 watch(
   () => [flag.value, playId.value],
@@ -371,7 +426,8 @@ onBeforeUnmount(() => {
       <div class="min-w-0">
         <div
           class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_26px_70px_-30px_rgba(0,0,0,1)]">
-          <video ref="video" class="w-full h-full" controls playsinline autoplay @ended="onEnded" />
+          <video ref="video" class="w-full h-full" :style="{ objectFit: fit }" controls playsinline autoplay
+            @ended="onEnded" />
           <div v-if="loading"
             class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-sm text-gray-300">
             <span class="w-9 h-9 rounded-full border-2 border-white/15 border-t-indigo-400 animate-spin" />
@@ -418,6 +474,22 @@ onBeforeUnmount(() => {
             class="b-none btn text-xs px-2 py-1 bg-white/[0.05] hover:bg-white/[0.11] text-gray-400" title="跳到片尾位置"
             @click="seekTo(marks.outro)">
             跳片尾
+          </button>
+
+          <!-- 自动连播：上下集自动播放开关（与站点播放页共用设置） -->
+          <button class="b-none btn text-xs px-2.5 py-1" :class="autoPlay
+            ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+            : 'bg-white/[0.05] text-gray-400 hover:bg-white/[0.11]'
+            " :title="autoPlay ? '当前开启，点击关闭' : '当前关闭，点击开启'" @click="toggleAutoPlay">
+            <span class="i-carbon-playlist" :class="autoPlay ? 'text-indigo-300' : ''" />
+            自动连播
+          </button>
+
+          <!-- 画面裁切模式：点击循环切换 cover / contain / fill / none -->
+          <button class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11] text-gray-300"
+            :title="`画面裁切模式：${FIT_LABELS[fit]}（点击切换）`" @click="toggleFit">
+            <span class="i-carbon-crop text-[10px]" />
+            {{ FIT_LABELS[fit] }}
           </button>
 
           <!-- 上下集：靠右对齐 -->

@@ -92,6 +92,37 @@ async function toggleAutoPlay() {
   }
 }
 
+/* ============================== 画面裁切模式（object-fit） ============================== */
+
+/** 画面裁切模式列表：cover 裁切铺满 / contain 完整显示 / fill 拉伸填满，点击按钮循环切换 */
+const FIT_MODES = ["cover", "contain", "fill", "none"] as const;
+type FitMode = (typeof FIT_MODES)[number];
+
+const FIT_LABELS: Record<FitMode, string> = {
+  cover: "裁切",
+  contain: "适应",
+  fill: "拉伸",
+  none: "默认",
+};
+
+function readFit(): FitMode {
+  const v = localStorage.getItem("fit-mode") ?? "";
+  return (FIT_MODES as readonly string[]).includes(v) ? (v as FitMode) : "cover";
+}
+
+const fit = ref<FitMode>(readFit());
+
+/** 点击循环切换裁切模式并持久化 */
+function toggleFit() {
+  const i = FIT_MODES.indexOf(fit.value);
+  fit.value = FIT_MODES[(i + 1) % FIT_MODES.length];
+  try {
+    localStorage.setItem("fit-mode", fit.value);
+  } catch {
+    /* localStorage 不可用时忽略 */
+  }
+}
+
 /** 点击「片头」：未设置则记录当前时间，已设置则取消 */
 async function toggleIntro() {
   if (!vodKey.value) return;
@@ -137,7 +168,7 @@ function seekTo(sec: number) {
   const el = video.value;
   if (!el || sec <= 0) return;
   el.currentTime = sec;
-  el.play().catch(() => {});
+  el.play().catch(() => { });
 }
 
 /** 加载片头片尾标记 */
@@ -183,7 +214,7 @@ function recordHistory() {
     ep_url: playId.value,
     vod: vodId.value || vodKey.value,
     site: site.value,
-  }).catch(() => {});
+  }).catch(() => { });
 }
 
 /** 应用续播：优先恢复同一剧集的进度；否则在设置了片头时自动跳过片头 */
@@ -406,7 +437,8 @@ onBeforeUnmount(() => {
       <div class="min-w-0">
         <div
           class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_26px_70px_-30px_rgba(0,0,0,1)]">
-          <video v-if="!iframeSrc" ref="video" class="w-full h-full" controls playsinline autoplay @ended="onEnded" />
+          <video v-if="!iframeSrc" ref="video" class="w-full h-full" :style="{ objectFit: fit }" controls playsinline
+            autoplay @ended="onEnded" />
           <iframe v-else :src="iframeSrc" class="w-full h-full border-0"
             allow="fullscreen; autoplay; encrypted-media; picture-in-picture" allowfullscreen
             referrerpolicy="no-referrer" />
@@ -464,6 +496,13 @@ onBeforeUnmount(() => {
             " :title="autoPlay ? '当前开启，点击关闭' : '当前关闭，点击开启'" @click="toggleAutoPlay">
             <span class="i-carbon-playlist" :class="autoPlay ? 'text-indigo-300' : ''" />
             自动连播
+          </button>
+
+          <!-- 画面裁切模式：点击循环切换 cover / contain / fill -->
+          <button class="b-none btn text-xs px-2.5 py-1 bg-white/[0.05] hover:bg-white/[0.11] text-gray-300"
+            :title="`画面裁切模式：${FIT_LABELS[fit]}（点击切换）`" @click="toggleFit">
+            <span class="i-carbon-crop text-[10px]" />
+            {{ FIT_LABELS[fit] }}
           </button>
 
           <!-- 上下集：靠右 -->
