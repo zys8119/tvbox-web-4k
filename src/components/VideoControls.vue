@@ -296,7 +296,9 @@ function toggleLock() {
 function poke() {
   visible.value = true;
   clearTimeout(hideTimer);
-  if (playing.value) {
+  // App 全屏：控制层持久显示（触摸端无悬停语义，显示/隐藏由单击画面切换）；
+  // 其余场景（浏览器 / 非全屏）保持闲置 2.6s 自动隐藏
+  if (playing.value && !(IS_NATIVE && fs.value)) {
     hideTimer = setTimeout(() => {
       if (!seeking.value) visible.value = false;
     }, 2600);
