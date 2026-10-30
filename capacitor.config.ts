@@ -4,7 +4,7 @@ const config: CapacitorConfig = {
   appId: "com.tvbox.web4k",
   appName: "TVBox 4K",
   webDir: "dist",
-  server: {
+  android: {
     // 页面为 https://localhost，允许加载 http 封面图/解析源（防混合内容拦截）
     allowMixedContent: true,
   },
