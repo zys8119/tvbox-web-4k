@@ -506,7 +506,7 @@ onBeforeUnmount(() => {
             referrerpolicy="no-referrer" />
 
           <!-- 自定义控制条：播放/暂停、进度、音量、全屏；#top/#extras 插槽提供扩展按钮（iframe 兜底时隐藏） -->
-          <VideoControls v-if="!iframeSrc" :video="video" :wrap="playerWrap">
+          <VideoControls v-if="!iframeSrc" :video="video" :wrap="playerWrap" @back="goBack">
             <!-- 左侧标题：当前集名称（与右侧片头片尾按钮保持同一水平线） -->
             <template #title>
               <span v-if="episodes[currentIndex]?.name" class="truncate text-sm font-medium text-white/95 drop-shadow">

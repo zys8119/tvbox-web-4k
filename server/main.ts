@@ -541,8 +541,10 @@ function sniffVideoUrls(html: string, baseUrl: string): string[] {
       /* 忽略非法 URL */
     }
   };
-  for (const m of html.matchAll(/<video[^>]*?src=["']([^"']+)["']/gi)) collect(m);
-  for (const m of html.matchAll(/<source[^>]*?src=["']([^"']+)["']/gi)) collect(m);
+  for (const m of html.matchAll(/<video[^>]*?src=["']([^"']+)["']/gi))
+    collect(m);
+  for (const m of html.matchAll(/<source[^>]*?src=["']([^"']+)["']/gi))
+    collect(m);
   // JS 变量（videoUrl/vurl/url/src 等）中常见的视频直链
   for (const m of html.matchAll(
     /(?:videoUrl|vurl|video_url|m3u8|mp4|playUrl|play_url|realUrl|url|src)\s*[:=]\s*["']([^"']+)["']/gi,
@@ -560,7 +562,9 @@ function sniffVideoUrls(html: string, baseUrl: string): string[] {
  * 播放地址解析：直链直接返回；否则抓取页面嗅探 HTML 中的视频资源。
  * 返回 { url: "" } 表示无法解析，由前端用 iframe 兜底播放。
  */
-async function resolvePlayUrl(url: string): Promise<{ url: string; msg?: string }> {
+async function resolvePlayUrl(
+  url: string,
+): Promise<{ url: string; msg?: string }> {
   if (isDirectUrl(url)) return { url };
   try {
     const res = await fetch(url, {
@@ -574,8 +578,7 @@ async function resolvePlayUrl(url: string): Promise<{ url: string; msg?: string 
     });
     if (!res.ok) return { url: "", msg: `页面请求失败 HTTP ${res.status}` };
     const ct = res.headers.get("content-type") ?? "";
-    if (ct.startsWith("video/") || ct.includes("octet-stream"))
-      return { url };
+    if (ct.startsWith("video/") || ct.includes("octet-stream")) return { url };
     const html = await res.text();
     const hit = sniffVideoUrls(html, url).find((u) => isDirectUrl(u));
     return hit ? { url: hit } : { url: "" };
@@ -1127,9 +1130,20 @@ function ensureInit(): Promise<void> {
   return initTask;
 }
 
+/** Apk WebView 页面为 https://localhost，请求内嵌服务属跨源，必须放行 CORS */
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Max-Age": "86400",
+};
+
 function sendJson(res: http.ServerResponse, code: number, data: unknown): void {
   const body = JSON.stringify(data);
-  res.writeHead(code, { "Content-Type": "application/json; charset=utf-8" });
+  res.writeHead(code, {
+    "Content-Type": "application/json; charset=utf-8",
+    ...CORS_HEADERS,
+  });
   res.end(body);
 }
 
@@ -1174,6 +1188,13 @@ const num = (v: unknown): number => {
 const server = http.createServer(async (req, res) => {
   const u = new URL(req.url ?? "/", "http://localhost");
   const q = u.searchParams;
+
+  // CORS 预检：浏览器跨源（https://localhost -> http://127.0.0.1:3001）请求二次携带时必发
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, CORS_HEADERS);
+    res.end();
+    return;
+  }
 
   try {
     if (u.pathname === "/health") {
@@ -1555,8 +1576,7 @@ const server = http.createServer(async (req, res) => {
 
     if (u.pathname === "/api/tvbox/parse") {
       const url = q.get("url") ?? "";
-      if (!url)
-        return sendJson(res, 400, { code: 0, msg: "缺少 url 参数" });
+      if (!url) return sendJson(res, 400, { code: 0, msg: "缺少 url 参数" });
       const r = await resolvePlayUrl(url);
       return sendJson(res, 200, r);
     }
@@ -1595,7 +1615,9 @@ const server = http.createServer(async (req, res) => {
     if (u.pathname === "/api/favorites/status") {
       const id = q.get("id") ?? "";
       const subId = getActiveSubscriptionId();
-      return sendJson(res, 200, { favorited: id ? isFavorite(subId, id) : false });
+      return sendJson(res, 200, {
+        favorited: id ? isFavorite(subId, id) : false,
+      });
     }
 
     if (u.pathname === "/api/favorites") {

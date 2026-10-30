@@ -28,6 +28,26 @@ defineSlots<{
   extras(props: { fs: boolean }): any;
 }>();
 
+/** 事件：全屏状态下点击左上角返回键（由父页面退出全屏并返回上一页） */
+const emit = defineEmits<{ (e: "back"): void }>();
+
+/** 触摸手势状态：触摸画面滑动控制快进/快退（水平）与音量（垂直） */
+let gesture:
+  | {
+    startX: number;
+    startY: number;
+    /** 方向锁定：h=水平(进度) / v=垂直(音量)，斜率超过阈值后锁定 */
+    dir: "h" | "v" | null;
+    /** 手势开始时的时间（秒）与音量，作为增量基准 */
+    baseTime: number;
+    baseVol: number;
+    w: number;
+    h: number;
+  }
+  | null = null;
+/** 到该时间戳为止忽略 click（滑动后释放产生的 click 不触发播放暂停） */
+let suppressClickUntil = 0;
+
 const playing = ref(false);
 const ready = ref(false);
 const currentTime = ref(0);
@@ -322,19 +342,59 @@ function toggleMute() {
 
 /* ============================== 全屏 ============================== */
 
+/** Screen Orientation API 的 lock/unlock 为实验性接口，不在标准 lib.dom 中 */
+interface ScreenOrientationExt extends ScreenOrientation {
+  lock(orientation: "landscape" | "portrait"): Promise<void>;
+  unlock(): void;
+}
+
+/**
+ * 锁横屏并感应重力：landscape 允许 0°/180° 两个方向旋转（传感器横屏），
+ * 手机无论左转还是右转都能跟随。WebView 内需处于全屏状态才能生效。
+ */
+function lockLandscape() {
+  try {
+    const so = screen.orientation as ScreenOrientationExt | null;
+    if (so && typeof so.lock === "function") {
+      so.lock("landscape").catch(() => { /* 部分环境不支持，忽略 */ });
+    }
+  } catch {
+    /* 忽略 */
+  }
+}
+
+/** 解除方向锁定，恢复系统自动旋转 */
+function unlockOrientation() {
+  try {
+    const so = screen.orientation as ScreenOrientationExt | null;
+    if (so && typeof so.unlock === "function") so.unlock();
+  } catch {
+    /* 忽略 */
+  }
+}
+
 function toggleFs() {
   const w = props.wrap;
   if (!w) return;
   if (document.fullscreenElement) {
     document.exitFullscreen().catch(() => { });
   } else {
-    w.requestFullscreen().catch(() => { });
+    w.requestFullscreen().then(lockLandscape).catch(() => { });
   }
 }
 
 function onFsChange() {
-  fs.value = !!document.fullscreenElement;
+  const isFs = !!document.fullscreenElement;
+  fs.value = isFs;
+  if (isFs) lockLandscape();
+  else unlockOrientation();
   poke();
+}
+
+/** 全屏左上角返回键：退出全屏并通知父页面返回上一页 */
+function onBackClick() {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
+  emit("back");
 }
 
 /* ============================== 下载 ============================== */
@@ -422,6 +482,73 @@ function onWrapLeave() {
   }
 }
 
+/* ============================== 触摸手势（移动端滑动控制） ============================== */
+
+/** 水平滑动整个画面宽度对应的快进秒数（约 5 分钟，手感明显且可控） */
+const GESTURE_FULL_WIDTH_SEC = 300;
+
+function onTouchStart(e: TouchEvent) {
+  if (e.touches.length !== 1) return;
+  const el = props.video;
+  const t = e.touches[0];
+  const w = props.wrap;
+  gesture = {
+    startX: t.clientX,
+    startY: t.clientY,
+    dir: null,
+    baseTime: el?.currentTime ?? 0,
+    baseVol: el?.volume ?? 1,
+    w: w?.clientWidth || el?.clientWidth || window.innerWidth,
+    h: w?.clientHeight || el?.clientHeight || window.innerHeight,
+  };
+}
+
+function onTouchMove(e: TouchEvent) {
+  if (!gesture || e.touches.length !== 1) return;
+  const t = e.touches[0];
+  const dx = t.clientX - gesture.startX;
+  const dy = t.clientY - gesture.startY;
+  // 未锁定方向时按斜率判定，并设置 10px 起步阈值避免轻触误判
+  if (!gesture.dir) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 10) return;
+    gesture.dir = Math.abs(dx) > Math.abs(dy) ? "h" : "v";
+    // 切换到滑动模式后，手势剩余位移基于起点绝对值计算
+  }
+  // 阻止页面滚动/缩放及滑动后的模拟 click
+  e.preventDefault();
+  poke();
+
+  const el = props.video;
+  if (!el) return;
+  if (gesture.dir === "h") {
+    // 水平滑动：按宽度比例映射快进/快退秒数（全宽 = 5 分钟），持续跳转并提示时间
+    const delta = (dx / gesture.w) * GESTURE_FULL_WIDTH_SEC;
+    const target = Math.min(
+      Math.max(0, gesture.baseTime + delta),
+      el.duration || 0,
+    );
+    currentTime.value = target;
+    el.currentTime = target;
+    // 显示 快进/快退 方向 + 时间
+    showOsd(delta < -0.5 ? `快退 ${fmtTime(target)}` : `快进 ${fmtTime(target)}`);
+  } else {
+    // 垂直滑动：向上增大音量、向下减小（全高 = 120%），静音同步
+    const ratio = dy / gesture.h;
+    const v = Math.min(1, Math.max(0, gesture.baseVol - ratio * 1.2));
+    el.volume = v;
+    el.muted = v === 0;
+    volume.value = v;
+    muted.value = v === 0;
+    showOsd(el.muted ? "静音" : `音量 ${Math.round(v * 100)}%`);
+  }
+}
+
+function onTouchEnd() {
+  // 发生过滑动：抑制随后产生的 click，避免误触发播放暂停
+  if (gesture && gesture.dir) suppressClickUntil = Date.now() + 300;
+  gesture = null;
+}
+
 /* ============================== 键盘快捷键 ============================== */
 
 /**
@@ -497,6 +624,8 @@ function onWindowBlur() {
 function onVideoClick(e: MouseEvent) {
   // 仅当事件目标是 video 自身时才切换播放，避免经冒泡到达的点击误触
   if (e.target !== props.video) return;
+  // 滑动手势结束后 300ms 内产生的 click 忽略（滑动已 handled）
+  if (Date.now() < suppressClickUntil) return;
   togglePlay();
 }
 
@@ -571,6 +700,10 @@ function attachEvents(el: HTMLVideoElement) {
   el.addEventListener("seeked", onSeeked);
   el.addEventListener("click", onVideoClick);
   el.addEventListener("dblclick", onVideoDblClick);
+  // 触摸滑动（passive:false 以便阻止页面滚动/缩放）
+  el.addEventListener("touchstart", onTouchStart, { passive: true });
+  el.addEventListener("touchmove", onTouchMove, { passive: false });
+  el.addEventListener("touchend", onTouchEnd, { passive: true });
   el.addEventListener("enterpictureinpicture", onEnterPip);
   el.addEventListener("leavepictureinpicture", onLeavePip);
 }
@@ -586,6 +719,9 @@ function detachEvents(el: HTMLVideoElement) {
   el.removeEventListener("seeked", onSeeked);
   el.removeEventListener("click", onVideoClick);
   el.removeEventListener("dblclick", onVideoDblClick);
+  el.removeEventListener("touchstart", onTouchStart);
+  el.removeEventListener("touchmove", onTouchMove);
+  el.removeEventListener("touchend", onTouchEnd);
   el.removeEventListener("enterpictureinpicture", onEnterPip);
   el.removeEventListener("leavepictureinpicture", onLeavePip);
 }
@@ -647,6 +783,12 @@ onBeforeUnmount(() => {
       class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3 bg-gradient-to-b from-black/50 to-transparent transition-opacity duration-300"
       :class="visible ? 'opacity-100' : 'opacity-0'">
       <div class="pointer-events-auto flex min-w-0 flex-1 items-center">
+        <!-- 全屏状态下左上角返回键：退出全屏并返回上一页 -->
+        <button v-if="fs"
+          class="mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 active:scale-95 transition-all"
+          title="退出全屏并返回" @click="onBackClick">
+          <span class="i-carbon-arrow-left text-base" />
+        </button>
         <slot name="title" :fs="fs" />
       </div>
       <div class="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
