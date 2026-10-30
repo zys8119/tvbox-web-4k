@@ -436,6 +436,13 @@ onBeforeUnmount(() => {
 
           <!-- 自定义控制条：播放/暂停、进度、音量、全屏；#top/#extras 插槽提供扩展按钮 -->
           <VideoControls :video="video" :wrap="playerWrap">
+            <!-- 左侧标题：当前集名称（与右侧片头片尾按钮保持同一水平线） -->
+            <template #title>
+              <span v-if="episodes[currentIndex]?.name"
+                class="truncate text-sm font-medium text-white/95 drop-shadow">
+                {{ episodes[currentIndex]!.name }}
+              </span>
+            </template>
             <!-- 片头/片尾：标记与跳转（进入控制条，页内工具栏同样保留） -->
             <template #top>
               <button v-if="vodId" class="b-none btn text-xs px-2.5 py-1" :class="marks.intro > 0

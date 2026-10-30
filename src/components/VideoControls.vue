@@ -21,8 +21,9 @@ const props = defineProps<{
   wrap: HTMLElement | null;
 }>();
 
-/** 插槽声明：#top / #extras（均可接收当前全屏状态） */
+/** 插槽声明：#title（左侧标题）/ #top / #extras（均可接收当前全屏状态） */
 defineSlots<{
+  title(props: { fs: boolean }): any;
   top(props: { fs: boolean }): any;
   extras(props: { fs: boolean }): any;
 }>();
@@ -564,10 +565,13 @@ onBeforeUnmount(() => {
 <template>
   <div v-if="video && ready" class="pointer-events-none absolute inset-0 z-10 transition-opacity duration-300"
     :class="visible ? 'opacity-100' : 'opacity-0'">
-    <!-- 顶部渐变条：右侧插槽（片头片尾标记 / 第三方扩展按钮等） -->
+    <!-- 顶部渐变条：左侧标题（当前集名称）+ 右侧插槽（片头片尾标记 / 第三方扩展按钮等） -->
     <div
-      class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-end p-3 bg-gradient-to-b from-black/50 to-transparent transition-opacity duration-300"
+      class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3 bg-gradient-to-b from-black/50 to-transparent transition-opacity duration-300"
       :class="visible ? 'opacity-100' : 'opacity-0'">
+      <div class="pointer-events-auto flex min-w-0 flex-1 items-center">
+        <slot name="title" :fs="fs" />
+      </div>
       <div class="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
         <slot name="top" :fs="fs" />
       </div>
@@ -595,7 +599,7 @@ onBeforeUnmount(() => {
       <div class="flex items-center gap-2.5">
         <!-- 播放/暂停 -->
         <button
-          class="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/25 active:scale-95 transition-all"
+          class="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 active:scale-95 transition-all"
           :title="playing ? '暂停' : '播放'" @click="togglePlay">
           <span :class="playing ? 'i-carbon-pause text-lg' : 'i-carbon-play-filled text-lg ml-0.5'" />
         </button>
@@ -631,13 +635,13 @@ onBeforeUnmount(() => {
             class="absolute bottom-full left-1/2 z-30 -translate-x-1/2 flex flex-col gap-0.5 rounded-xl border border-white/10 bg-[#0e1017]/95 p-1 pb-1.5 shadow-2xl backdrop-blur-sm">
             <button v-for="r in RATES" :key="r"
               class="b-none w-16 rounded-lg px-3 py-1 text-[11px] tabular-nums transition-colors"
-              :class="r === rate ? 'bg-indigo-500/25 text-indigo-200' : 'text-gray-300 hover:bg-white/10 hover:text-white'"
+              :class="r === rate ? 'bg-black/60 text-white' : 'text-gray-300 hover:bg-white/15 hover:text-white'"
               @click="setRate(r)">
               {{ r }}x
             </button>
           </div>
           <button
-            class="w-10 rounded-full px-2 py-0.5 text-[11px] tabular-nums text-white/85 hover:bg-white/10 hover:text-white transition-colors"
+            class="w-10 rounded-full px-2 py-0.5 text-[11px] tabular-nums text-white/85 hover:bg-white/15 hover:text-white transition-colors"
             :title="`播放速度：当前 ${rate}x（悬浮展开选择，点击循环切换）`" @click="cycleRate">
             {{ rate }}x
           </button>
@@ -649,8 +653,8 @@ onBeforeUnmount(() => {
         <!-- 音量 -->
         <div class="pointer-events-auto hidden shrink-0 items-center gap-1.5 sm:flex">
           <button
-            class="flex h-8 w-8 items-center justify-center rounded-full text-white/85 hover:bg-white/10 hover:text-white transition-colors"
-            :title="muted || volume === 0 ? '取消静音' : '静音'" @click="toggleMute">
+            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+            :title="muted || volume === 0 ? '取消静音（快捷键 M）' : '静音（快捷键 M）'" @click="toggleMute">
             <span :class="muted || volume === 0 ? 'i-carbon-volume-mute text-base' : 'i-carbon-volume-up text-base'" />
           </button>
           <input type="range" min="0" max="1" step="0.05" class="w-16 accent-indigo-500" :value="muted ? 0 : volume"
@@ -659,7 +663,7 @@ onBeforeUnmount(() => {
 
         <!-- 全屏 -->
         <button
-          class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/10 hover:text-white transition-colors"
+          class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
           :title="fs ? '退出全屏' : '全屏'" @click="toggleFs">
           <span :class="fs ? 'i-carbon-minimize text-base' : 'i-carbon-maximize text-base'" />
         </button>

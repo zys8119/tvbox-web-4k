@@ -4,18 +4,23 @@ import { useRoute, useRouter } from "vue-router";
 import Hls from "hls.js";
 import VideoControls from "../components/VideoControls.vue";
 import EpisodePicker from "../components/EpisodePicker.vue";
+import VodIntro from "../components/VodIntro.vue";
 import {
+  addFavoriteApi,
   fetchAutoPlay,
+  fetchFavoriteStatus,
   fetchMarks,
   fetchProgress,
   fetchTvboxDetail,
   fetchTvboxParse,
   pushHistory,
+  removeFavoriteApi,
   saveMarksApi,
   saveProgressApi,
   setAutoPlay,
   type Marks,
   type PlayLine,
+  type VodDetail,
 } from "../api";
 
 const route = useRoute();
@@ -46,6 +51,49 @@ const vodId = computed(() => String(route.query.vod ?? ""));
 
 /** 实际用于收藏/历史/进度/标记的影片标识（vod 参数缺失时回退到详情里的 real vod_id） */
 const vodKey = ref("");
+
+/** 完整影片详情（来自详情接口，供简介面板与收藏使用） */
+const detail = ref<VodDetail | null>(null);
+
+/** 简介弹层开关（相对视频容器的右侧半屏面板） */
+const showIntro = ref(false);
+
+/** 是否已收藏（归属当前订阅） */
+const favorited = ref(false);
+/** 收藏按钮防抖 */
+const favBusy = ref(false);
+
+/** 详情实际数据源站点（服务端兜底时可能返回其它站点 site_key） */
+const dataSourceSite = computed(() => detail.value?.site_key || site.value);
+
+/** 收藏标识：优先使用真实 vod_id */
+const favKey = computed(() => detail.value?.vod_id || vodKey.value);
+
+/** 切换收藏：已收藏则取消，未收藏则按详情信息入藏 */
+async function toggleFavorite() {
+  const vid = favKey.value;
+  if (!vid || favBusy.value) return;
+  favBusy.value = true;
+  try {
+    if (favorited.value) {
+      await removeFavoriteApi(vid);
+      favorited.value = false;
+    } else {
+      await addFavoriteApi({
+        vod_id: vid,
+        vod_name: detail.value?.vod_name || title.value,
+        vod_pic: detail.value?.vod_pic,
+        remarks: detail.value?.vod_remarks,
+        site: dataSourceSite.value,
+      });
+      favorited.value = true;
+    }
+  } catch {
+    /* 收藏失败保持原状态 */
+  } finally {
+    favBusy.value = false;
+  }
+}
 
 /* ============================== 进度 / 片头片尾 / 自动连播 ============================== */
 
@@ -451,6 +499,12 @@ onBeforeUnmount(() => {
 
           <!-- 自定义控制条：播放/暂停、进度、音量、全屏；#top/#extras 插槽提供扩展按钮（iframe 兜底时隐藏） -->
           <VideoControls v-if="!iframeSrc" :video="video" :wrap="playerWrap">
+            <!-- 左侧标题：当前集名称（与右侧片头片尾按钮保持同一水平线） -->
+            <template #title>
+              <span v-if="episodes[currentIndex]?.name" class="truncate text-sm font-medium text-white/95 drop-shadow">
+                {{ episodes[currentIndex]!.name }}
+              </span>
+            </template>
             <!-- 片头/片尾：标记与跳转（进入控制条，页内工具栏同样保留） -->
             <template #top>
               <button v-if="vodKey" class="b-none btn text-xs px-2.5 py-1" :class="marks.intro > 0
