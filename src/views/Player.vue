@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Hls from "hls.js";
+import VideoControls from "../components/VideoControls.vue";
 import {
   fetchAutoPlay,
   fetchDetail,
@@ -21,6 +22,8 @@ const route = useRoute();
 const router = useRouter();
 
 const video = ref<HTMLVideoElement | null>(null);
+/** 播放器容器：自定义控制条以此为目标进行全屏（包含 video + 控制条） */
+const playerWrap = ref<HTMLDivElement | null>(null);
 const loading = ref(true);
 const error = ref("");
 const title = ref("");
@@ -424,10 +427,64 @@ onBeforeUnmount(() => {
     <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] gap-6 items-start">
       <!-- 左：播放器 + 上下集 -->
       <div class="min-w-0">
-        <div
-          class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_26px_70px_-30px_rgba(0,0,0,1)]">
-          <video ref="video" class="w-full h-full" :style="{ objectFit: fit }" controls playsinline autoplay
-            @ended="onEnded" />
+        <div ref="playerWrap"
+          class="vc-wrap-fullscreen relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-[0_26px_70px_-30px_rgba(0,0,0,1)]">
+          <video ref="video" class="w-full h-full" :style="{ objectFit: fit }" playsinline autoplay @ended="onEnded" />
+
+          <!-- 自定义控制条：播放/暂停、进度、音量、全屏；#top/#extras 插槽提供扩展按钮 -->
+          <VideoControls :video="video" :wrap="playerWrap">
+            <!-- 片头/片尾：标记与跳转（进入控制条，页内工具栏同样保留） -->
+            <template #top>
+              <button v-if="vodId" class="b-none btn text-xs px-2.5 py-1" :class="marks.intro > 0
+                ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+                : 'bg-white/10 text-gray-200 hover:bg-white/20'
+                " :title="marks.intro > 0
+                  ? '点击取消片头标记（当前 ' + fmtTime(marks.intro) + '）'
+                  : '点击记录当前播放位置为片头'
+                  " @click="toggleIntro">
+                <span class="i-carbon-skip-forward text-[10px]" />
+                {{ introLabel }}
+              </button>
+              <button v-if="vodId" class="b-none btn text-xs px-2.5 py-1" :class="marks.outro > 0
+                ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+                : 'bg-white/10 text-gray-200 hover:bg-white/20'
+                " :title="marks.outro > 0
+                  ? '点击取消片尾标记（当前 ' + fmtTime(marks.outro) + '）'
+                  : '点击记录当前播放位置为片尾'
+                  " @click="toggleOutro">
+                <span class="i-carbon-skip-backward text-[10px]" />
+                {{ outroLabel }}
+              </button>
+              <button v-if="vodId && marks.intro > 0"
+                class="b-none btn text-xs px-2 py-1 bg-white/10 hover:bg-white/20 text-gray-200" title="跳到片头位置"
+                @click="seekTo(marks.intro)">
+                跳片头
+              </button>
+              <button v-if="vodId && marks.outro > 0"
+                class="b-none btn text-xs px-2 py-1 bg-white/10 hover:bg-white/20 text-gray-200" title="跳到片尾位置"
+                @click="seekTo(marks.outro)">
+                跳片尾
+              </button>
+            </template>
+            <template #extras="{ fs }">
+              <!-- 自动连播（全屏时可切换，页内由下方工具栏承载） -->
+              <button v-if="fs" class="b-none btn text-xs px-2.5 py-1 shrink-0" :class="autoPlay
+                ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+                : 'bg-white/[0.05] text-gray-400 hover:bg-white/[0.11]'
+                " :title="autoPlay ? '当前开启，点击关闭' : '当前关闭，点击开启'" @click="toggleAutoPlay">
+                <span class="i-carbon-playlist" :class="autoPlay ? 'text-indigo-300' : ''" />
+                自动连播
+              </button>
+              <!-- 画面裁切（全屏时可切换） -->
+              <button v-if="fs"
+                class="b-none btn text-xs px-2.5 py-1 shrink-0 bg-white/[0.05] hover:bg-white/[0.11] text-gray-300"
+                :title="`画面裁切模式：${FIT_LABELS[fit]}（点击切换）`" @click="toggleFit">
+                <span class="i-carbon-crop text-[10px]" />
+                {{ FIT_LABELS[fit] }}
+              </button>
+            </template>
+          </VideoControls>
+
           <div v-if="loading"
             class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-sm text-gray-300">
             <span class="w-9 h-9 rounded-full border-2 border-white/15 border-t-indigo-400 animate-spin" />
