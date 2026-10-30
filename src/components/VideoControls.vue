@@ -494,11 +494,14 @@ function onWindowBlur() {
   stopSeekHold();
 }
 
-function onVideoClick() {
+function onVideoClick(e: MouseEvent) {
+  // 仅当事件目标是 video 自身时才切换播放，避免经冒泡到达的点击误触
+  if (e.target !== props.video) return;
   togglePlay();
 }
 
-function onVideoDblClick() {
+function onVideoDblClick(e: MouseEvent) {
+  if (e.target !== props.video) return;
   toggleFs();
 }
 
@@ -638,7 +641,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="video && ready" class="pointer-events-none absolute inset-0 z-10 transition-opacity duration-300"
-    :class="visible ? 'opacity-100' : 'opacity-0'">
+    :class="visible ? 'opacity-100' : 'opacity-0'" @click.stop @dblclick.stop>
     <!-- 顶部渐变条：左侧标题（当前集名称）+ 右侧插槽（片头片尾标记 / 第三方扩展按钮等） -->
     <div
       class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3 bg-gradient-to-b from-black/50 to-transparent transition-opacity duration-300"
@@ -722,7 +725,9 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- 扩展按钮插槽（第三方插件/自动连播/裁切/切集等） -->
-        <slot name="extras" :fs="fs" />
+        <div class="pointer-events-auto flex items-center gap-2.5">
+          <slot name="extras" :fs="fs" />
+        </div>
 
         <!-- 音量 -->
         <div class="pointer-events-auto hidden shrink-0 items-center gap-1.5 sm:flex">

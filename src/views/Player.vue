@@ -490,8 +490,7 @@ onBeforeUnmount(() => {
           <VideoControls :video="video" :wrap="playerWrap">
             <!-- 左侧标题：当前集名称（与右侧片头片尾按钮保持同一水平线） -->
             <template #title>
-              <span v-if="episodes[currentIndex]?.name"
-                class="truncate text-sm font-medium text-white/95 drop-shadow">
+              <span v-if="episodes[currentIndex]?.name" class="truncate text-sm font-medium text-white/95 drop-shadow">
                 {{ episodes[currentIndex]!.name }}
               </span>
             </template>
@@ -535,9 +534,8 @@ onBeforeUnmount(() => {
                 选集
               </button>
               <!-- 简介：打开影片详情弹层 -->
-              <button v-if="detail"
-                class="b-none btn text-xs px-2.5 py-1 bg-white/10 hover:bg-white/20 text-gray-200" title="简介"
-                @click="showIntro = true">
+              <button v-if="detail" class="b-none btn text-xs px-2.5 py-1 bg-white/10 hover:bg-white/20 text-gray-200"
+                title="简介" @click="showIntro = true">
                 <span class="i-carbon-document-text text-[10px]" />
                 简介
               </button>
