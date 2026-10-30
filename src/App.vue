@@ -53,7 +53,7 @@ function doSearch() {
   <div class="min-h-full flex flex-col">
     <!-- 顶部导航 -->
     <header
-      class="sticky top-0 z-30 bg-[#0a0b0f]/70 backdrop-blur-2xl border-b border-white/[0.07] shadow-[0_8px_32px_-16px_rgba(0,0,0,0.9)]">
+      class="sticky top-0 z-30 bg-[#0a0b0f]/70 backdrop-blur-2xl border-b border-white/[0.07] shadow-[0_8px_32px_-16px_rgba(0,0,0,0.9)] pt-[env(safe-area-inset-top)]">
       <div class="page-wrap h-16 flex items-center gap-4">
         <RouterLink to="/" class="group flex items-center gap-2 shrink-0">
           <span
@@ -155,7 +155,8 @@ function doSearch() {
       </RouterView>
     </main>
 
-    <footer class="mt-8 border-t border-white/[0.07] py-8 text-center text-xs text-gray-500">
+    <footer
+      class="mt-8 border-t border-white/[0.07] py-8 text-center text-xs text-gray-500 pb-[calc(env(safe-area-inset-bottom)+2rem)]">
       <p class="tracking-wide">橘汁影视 · 仅供学习交流使用</p>
     </footer>
   </div>

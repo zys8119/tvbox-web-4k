@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Capacitor } from "@capacitor/core";
 import { ScreenOrientation } from "@capgo/capacitor-screen-orientation";
-import { StatusBar, Style } from "@capacitor/status-bar";
 
 /**
  * 自定义播放器控制条（替代原生 controls）。
@@ -480,32 +479,10 @@ function toggleFs() {
 }
 
 /**
- * 进入全屏：系统栏（状态栏 + 导航栏）透明悬浮在画面之上，界面真正全屏。
- * 原生平台通过 StatusBar 插件将 WebView 内容延伸到系统栏后面、状态栏背景透明化；
- * Android 15+ 本身强制 edge-to-edge（系统栏半透明悬浮），此设置保持行为一致。
+ * 复位画面缩放/平移（退出全屏、切换视频时调用）。
+ * 注：系统栏沉浸（edge-to-edge 透明悬浮）由原生层 MainActivity 全局配置，
+ * 全屏/退出全屏均无需前端干预。
  */
-async function enterImmersive() {
-  try {
-    if (!Capacitor.isNativePlatform()) return;
-    await StatusBar.setOverlaysWebView({ overlay: true });
-    await StatusBar.setStyle({ style: Style.Light });
-    await StatusBar.setBackgroundColor({ color: "#00000000" });
-  } catch {
-    /* 插件不可用/低版本环境失败时忽略 */
-  }
-}
-
-/** 退出全屏：取消 WebView 对系统栏的覆盖，恢复系统栏默认呈现 */
-async function exitImmersive() {
-  try {
-    if (!Capacitor.isNativePlatform()) return;
-    await StatusBar.setOverlaysWebView({ overlay: false });
-  } catch {
-    /* 忽略 */
-  }
-}
-
-/** 复位画面缩放/平移（退出全屏、切换视频时调用） */
 function resetZoom() {
   scale.value = 1;
   offsetX.value = 0;
@@ -518,10 +495,8 @@ function onFsChange() {
   fs.value = isFs;
   if (isFs) {
     lockLandscape();
-    enterImmersive();
   } else {
     restorePortrait();
-    exitImmersive();
     resetZoom();
   }
   poke();
