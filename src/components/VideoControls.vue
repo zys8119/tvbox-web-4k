@@ -337,6 +337,76 @@ function onFsChange() {
   poke();
 }
 
+/* ============================== 下载 ============================== */
+
+/**
+ * 下载当前视频：直链（mp4 等）用 fetch 转 Blob 下载，文件名取资源名；
+ * 流媒体（blob:/m3u8）无法直接下载，给出提示；跨域受限时降级为新窗口打开资源。
+ */
+function downloadVideo() {
+  const el = props.video;
+  if (!el) return;
+  const src = el.currentSrc || el.src;
+  if (!src) {
+    showOsd("暂无下载地址");
+    return;
+  }
+  if (src.startsWith("blob:") || /\.m3u8(\?.*)?$/i.test(src)) {
+    showOsd("流媒体暂不支持直接下载");
+    return;
+  }
+  const name = src.split("/").pop()?.split("?")[0] || "video";
+  fetch(src)
+    .then((r) => {
+      if (!r.ok) throw new Error(r.statusText);
+      return r.blob();
+    })
+    .then((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showOsd("开始下载");
+    })
+    .catch(() => {
+      // 跨域受限（如未带缓存头）：直接以新窗口打开，便于浏览器原生处理
+      window.open(src, "_blank");
+    });
+}
+
+/* ============================== 画中画 ============================== */
+
+/** 当前是否处于画中画状态 */
+const pipActive = ref(false);
+
+function togglePip() {
+  const el = props.video;
+  if (!el) return;
+  if (document.pictureInPictureElement) {
+    document.exitPictureInPicture().catch(() => { });
+    return;
+  }
+  if (!document.pictureInPictureEnabled) {
+    showOsd("当前浏览器不支持画中画");
+    return;
+  }
+  // 画中画与全屏互斥：进入画中画前先退出全屏
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => { });
+  el.requestPictureInPicture().catch(() => showOsd("画中画启动失败"));
+}
+
+function onEnterPip() {
+  pipActive.value = true;
+  poke();
+}
+
+function onLeavePip() {
+  pipActive.value = false;
+  poke();
+}
+
 /* ============================== 容器鼠标事件 ============================== */
 
 /** 鼠标在播放器内活动：立即显示控制条并进入闲置倒计时 */
@@ -498,6 +568,8 @@ function attachEvents(el: HTMLVideoElement) {
   el.addEventListener("seeked", onSeeked);
   el.addEventListener("click", onVideoClick);
   el.addEventListener("dblclick", onVideoDblClick);
+  el.addEventListener("enterpictureinpicture", onEnterPip);
+  el.addEventListener("leavepictureinpicture", onLeavePip);
 }
 
 function detachEvents(el: HTMLVideoElement) {
@@ -511,6 +583,8 @@ function detachEvents(el: HTMLVideoElement) {
   el.removeEventListener("seeked", onSeeked);
   el.removeEventListener("click", onVideoClick);
   el.removeEventListener("dblclick", onVideoDblClick);
+  el.removeEventListener("enterpictureinpicture", onEnterPip);
+  el.removeEventListener("leavepictureinpicture", onLeavePip);
 }
 
 watch(
@@ -660,6 +734,21 @@ onBeforeUnmount(() => {
           <input type="range" min="0" max="1" step="0.05" class="w-16 accent-indigo-500" :value="muted ? 0 : volume"
             @input="onVolumeInput" :title="'音量 ' + Math.round((muted ? 0 : volume) * 100) + '%'" />
         </div>
+
+        <!-- 下载 -->
+        <button
+          class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+          title="下载当前视频" @click="downloadVideo">
+          <span class="i-carbon-download text-base" />
+        </button>
+
+        <!-- 画中画（视频脱离页面窗口置顶小窗播放，与全屏互斥） -->
+        <button
+          class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors"
+          :class="pipActive ? 'bg-white/15 text-white' : 'text-white/85 hover:bg-white/15 hover:text-white'"
+          :title="pipActive ? '退出画中画' : '画中画'" @click="togglePip">
+          <span class="i-carbon-view-mode-2 text-base" />
+        </button>
 
         <!-- 全屏 -->
         <button

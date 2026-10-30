@@ -411,6 +411,14 @@ async function loadEpisodes() {
     title.value = title.value || d.vod_name;
     vodKey.value = d.vod_id || vodId.value;
     lines.value = d.vod_play_list;
+    detail.value = d;
+    // 查询收藏状态（收藏归属当前订阅）
+    try {
+      const s = await fetchFavoriteStatus(favKey.value);
+      favorited.value = s.favorited;
+    } catch {
+      favorited.value = false;
+    }
     await loadMarks();
   } catch {
     /* 选集失败不影响播放 */
@@ -544,6 +552,20 @@ onBeforeUnmount(() => {
                 <span class="i-carbon-list-boxes text-[10px]" />
                 选集
               </button>
+              <!-- 简介：打开影片详情弹层 -->
+              <button v-if="detail" class="b-none btn text-xs px-2.5 py-1 bg-white/10 hover:bg-white/20 text-gray-200"
+                title="简介" @click="showIntro = true">
+                <span class="i-carbon-document-text text-[10px]" />
+                简介
+              </button>
+              <!-- 收藏：加入/取消收藏（全屏与页内均可用） -->
+              <button v-if="vodKey" class="b-none btn text-xs px-2.5 py-1" :class="favorited
+                ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+                : 'bg-white/10 text-gray-200 hover:bg-white/20'
+                " :disabled="favBusy" :title="favorited ? '取消收藏' : '加入收藏'" @click="toggleFavorite">
+                <span :class="favorited ? 'i-carbon-favorite-filled' : 'i-carbon-favorite'" />
+                {{ favorited ? "已收藏" : "收藏" }}
+              </button>
             </template>
             <template #extras="{ fs }">
               <!-- 自动连播（全屏时可切换，页内由下方工具栏承载） -->
@@ -568,6 +590,9 @@ onBeforeUnmount(() => {
           <EpisodePicker v-if="showEpPicker && episodes.length" :episodes="episodes" :current-url="playId"
             :title="currentLine?.from ?? '选集'" @select="(url: string) => { showEpPicker = false; goEp(url, flag); }"
             @close="showEpPicker = false" />
+
+          <!-- 简介弹层：覆盖播放器展示影片详情 -->
+          <VodIntro v-if="showIntro && detail" :detail="detail" @close="showIntro = false" />
 
           <div v-if="loading"
             class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-sm text-gray-300">

@@ -4,19 +4,24 @@ import { useRoute, useRouter } from "vue-router";
 import Hls from "hls.js";
 import VideoControls from "../components/VideoControls.vue";
 import EpisodePicker from "../components/EpisodePicker.vue";
+import VodIntro from "../components/VodIntro.vue";
 import {
+  addFavoriteApi,
   fetchAutoPlay,
   fetchDetail,
+  fetchFavoriteStatus,
   fetchMarks,
   fetchPlay,
   fetchProgress,
   parseHeader,
   pushHistory,
+  removeFavoriteApi,
   saveMarksApi,
   saveProgressApi,
   setAutoPlay,
   type Marks,
   type PlayLine,
+  type VodDetail,
 } from "../api";
 
 const route = useRoute();
@@ -34,6 +39,45 @@ const vodRemarks = ref("");
 const lines = ref<PlayLine[]>([]);
 /** 是否显示选集弹层（在播放器上悬浮展示剧集列表） */
 const showEpPicker = ref(false);
+
+/** 完整影片详情（来自详情接口，供简介面板与收藏使用） */
+const detail = ref<VodDetail | null>(null);
+
+/** 简介弹层开关（相对视频容器的右侧半屏面板） */
+const showIntro = ref(false);
+
+/** 是否已收藏（主站收藏） */
+const favorited = ref(false);
+/** 收藏按钮防抖 */
+const favBusy = ref(false);
+
+/** 收藏标识：优先使用真实 vod_id */
+const favKey = computed(() => detail.value?.vod_id || vodId.value);
+
+/** 切换收藏：已收藏则取消，未收藏则按详情信息入藏 */
+async function toggleFavorite() {
+  const vid = favKey.value;
+  if (!vid || favBusy.value) return;
+  favBusy.value = true;
+  try {
+    if (favorited.value) {
+      await removeFavoriteApi(vid);
+      favorited.value = false;
+    } else {
+      await addFavoriteApi({
+        vod_id: vid,
+        vod_name: detail.value?.vod_name || title.value,
+        vod_pic: detail.value?.vod_pic,
+        remarks: detail.value?.vod_remarks,
+      });
+      favorited.value = true;
+    }
+  } catch {
+    /* 收藏失败保持原状态 */
+  } finally {
+    favBusy.value = false;
+  }
+}
 
 let hls: Hls | null = null;
 
@@ -350,6 +394,14 @@ async function loadEpisodes() {
     vodPic.value = d.vod_pic;
     vodRemarks.value = d.vod_remarks;
     lines.value = d.vod_play_list;
+    detail.value = d;
+    // 查询收藏状态
+    try {
+      const s = await fetchFavoriteStatus(favKey.value);
+      favorited.value = s.favorited;
+    } catch {
+      favorited.value = false;
+    }
     // 详情就绪后补写一次历史，确保封面/备注能落到记录里
     recordHistory();
   } catch {
@@ -482,6 +534,21 @@ onBeforeUnmount(() => {
                 <span class="i-carbon-list-boxes text-[10px]" />
                 选集
               </button>
+              <!-- 简介：打开影片详情弹层 -->
+              <button v-if="detail"
+                class="b-none btn text-xs px-2.5 py-1 bg-white/10 hover:bg-white/20 text-gray-200" title="简介"
+                @click="showIntro = true">
+                <span class="i-carbon-document-text text-[10px]" />
+                简介
+              </button>
+              <!-- 收藏：加入/取消收藏（全屏与页内均可用） -->
+              <button v-if="vodId" class="b-none btn text-xs px-2.5 py-1" :class="favorited
+                ? 'bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30'
+                : 'bg-white/10 text-gray-200 hover:bg-white/20'
+                " :disabled="favBusy" :title="favorited ? '取消收藏' : '加入收藏'" @click="toggleFavorite">
+                <span :class="favorited ? 'i-carbon-favorite-filled' : 'i-carbon-favorite'" />
+                {{ favorited ? "已收藏" : "收藏" }}
+              </button>
             </template>
             <template #extras="{ fs }">
               <!-- 自动连播（全屏时可切换，页内由下方工具栏承载） -->
@@ -506,6 +573,9 @@ onBeforeUnmount(() => {
           <EpisodePicker v-if="showEpPicker && episodes.length" :episodes="episodes" :current-url="playId"
             :title="currentLine?.from ?? '选集'" @select="(url: string) => { showEpPicker = false; goEp(url, flag); }"
             @close="showEpPicker = false" />
+
+          <!-- 简介弹层：覆盖播放器展示影片详情 -->
+          <VodIntro v-if="showIntro && detail" :detail="detail" @close="showIntro = false" />
 
           <div v-if="loading"
             class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-sm text-gray-300">
