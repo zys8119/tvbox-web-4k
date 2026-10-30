@@ -1,6 +1,11 @@
 /** 后端 Node 服务（node/main.ts）的接口封装 */
 
-const BASE: string = import.meta.env.VITE_API_BASE ?? "/api";
+import { BACKEND_BASE, isNative } from "../capacitor";
+
+// APK 内 WebView 没有 Vite 代理，相对 /api 会被 Capacitor 本地服务器以 index.html 兜底返回，
+// 导致 res.json() 报 "Unexpected token '<'"。原生端必须直连内嵌 Node 服务（127.0.0.1:3001）。
+const BASE: string =
+  import.meta.env.VITE_API_BASE ?? (isNative() ? BACKEND_BASE : "/api");
 
 export interface VodItem {
   vod_id: string;
@@ -76,7 +81,10 @@ export interface PlayResult {
   msg?: string;
 }
 
-async function getJson<T>(path: string, params?: Record<string, string>): Promise<T> {
+async function getJson<T>(
+  path: string,
+  params?: Record<string, string>,
+): Promise<T> {
   const qs = params
     ? "?" +
       new URLSearchParams(
@@ -92,8 +100,7 @@ async function getJson<T>(path: string, params?: Record<string, string>): Promis
 export const fetchHome = () => getJson<HomeData>("/home");
 
 /** 首页推荐 */
-export const fetchHomeVideo = () =>
-  getJson<{ list: VodItem[] }>("/home/video");
+export const fetchHomeVideo = () => getJson<{ list: VodItem[] }>("/home/video");
 
 /** 分类列表 */
 export const fetchCategory = (
@@ -316,9 +323,13 @@ export const switchTvboxSubscription = (id: string) =>
 
 /** 删除保存的订阅 */
 export const removeTvboxSubscription = (id: string) =>
-  sendJson<{ ok: boolean; activeId: string }>("/api/tvbox/config/remove", "POST", {
-    id,
-  });
+  sendJson<{ ok: boolean; activeId: string }>(
+    "/api/tvbox/config/remove",
+    "POST",
+    {
+      id,
+    },
+  );
 
 /** 重新拉取订阅 */
 export const refreshTvbox = () =>

@@ -519,6 +519,16 @@ async function getText(
   return buf.toString("utf8");
 }
 
+/** 解析 JSON，失败时给出可读错误（如接口返回了 HTML） */
+function parseJsonOrThrow(raw: string, hint: string, url: string): any {
+  const t = raw.trim();
+  try {
+    return JSON.parse(t);
+  } catch {
+    throw new Error(`${hint} 返回非 JSON（接口可能已失效或被拦截）: ${url}`);
+  }
+}
+
 /* ============================== 工具函数 ============================== */
 
 const isNSFW = (s: string): boolean => !!s && NSFW.test(s);
@@ -908,7 +918,11 @@ class Woshinidie {
   /** 首页分类 + 筛选器 */
   async homeContent() {
     const url = this.host + "/api/v3/drama/getCategory?orderBy=type_id";
-    const json = JSON.parse(await getText(url, this.jsonHeaders()));
+    const json = parseJsonOrThrow(
+      await getText(url, this.jsonHeaders()),
+      "主站分类接口",
+      url,
+    );
     const arr: any[] = json.data ?? [];
 
     const classes: { type_id: string; type_name: string }[] = [];
@@ -951,7 +965,7 @@ class Woshinidie {
     const url = this.host + "/api/ex/v3/security/tag/list";
     // 与原实现一致：直接解析 JSON 包装，取 data 字段
     const raw = (await getText(url, this.jsonHeaders())).trim();
-    const enc = String(JSON.parse(raw).data ?? "");
+    const enc = String(parseJsonOrThrow(raw, "主站推荐接口", url).data ?? "");
     if (!enc) return { list: [] };
 
     // 原实现为双重解密：先 this.f，再 keys[1]
