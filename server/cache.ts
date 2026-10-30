@@ -12,14 +12,14 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { openDatabase, type SqlDatabase } from "./sqlite.ts";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(here, "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const db = new DatabaseSync(path.join(DATA_DIR, "app.db"));
+const db: SqlDatabase = await openDatabase(path.join(DATA_DIR, "app.db"));
 
 db.exec(`
   PRAGMA journal_mode = WAL;

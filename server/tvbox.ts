@@ -13,6 +13,7 @@ import {
   setJsonSetting,
   setSetting,
 } from "./db.ts";
+import { jvmAvailable } from "./jarbridge.ts";
 
 /** 订阅响应需要用 TVBox 客户端的 UA，否则服务端返回 HTML 介绍页 */
 export const TVBOX_UA = "okhttp/3.12.1";
@@ -352,6 +353,12 @@ function judge(s: RawSite): { supported: boolean; reason?: string } {
       : { supported: false, reason: "缺少有效 api 地址" };
   }
   if (s.type === 3) {
+    if (!jvmAvailable) {
+      return {
+        supported: false,
+        reason: "当前环境无 JVM 运行时，无法执行 csp jar 站点",
+      };
+    }
     return s.api
       ? { supported: true }
       : { supported: false, reason: "缺少有效 csp api" };

@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import "virtual:uno.css";
 import "./style.css";
 import App from "./App.vue";
+import { startEmbeddedBackend, useEmbeddedBackend } from "./capacitor";
 import Home from "./views/Home.vue";
 import Category from "./views/Category.vue";
 import Search from "./views/Search.vue";
@@ -34,4 +35,12 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 }),
 });
 
-createApp(App).use(router).mount("#app");
+async function bootstrap() {
+  // APK 环境：先启动内嵌 Node 后端，再挂载应用
+  if (useEmbeddedBackend()) {
+    await startEmbeddedBackend();
+  }
+  createApp(App).use(router).mount("#app");
+}
+
+void bootstrap();

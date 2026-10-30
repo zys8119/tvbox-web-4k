@@ -1175,6 +1175,16 @@ const server = http.createServer(async (req, res) => {
   const u = new URL(req.url ?? "/", "http://localhost");
   const q = u.searchParams;
 
+  // CORS：允许内嵌 WebView（http://localhost / https://localhost）跨源访问本服务
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
   try {
     if (u.pathname === "/health") {
       return sendJson(res, 200, { ok: true });
