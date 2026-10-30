@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Capacitor } from "@capacitor/core";
 import { ScreenOrientation } from "@capgo/capacitor-screen-orientation";
+import { hideSystemBars, showSystemBars } from "../capacitor";
 
 /** 当前是否为原生平台（App 模式）：改变画面点击/双击交互语义 */
 const IS_NATIVE = Capacitor.isNativePlatform();
@@ -507,9 +508,13 @@ function onFsChange() {
   fs.value = isFs;
   if (isFs) {
     lockLandscape();
+    // 全屏播放：隐藏系统菜单栏（状态栏 + 导航栏），画面铺满整个屏幕
+    hideSystemBars();
   } else {
     restorePortrait();
     resetZoom();
+    // 退出全屏：恢复系统菜单栏显示
+    showSystemBars();
   }
   poke();
 }
@@ -975,8 +980,9 @@ onBeforeUnmount(() => {
     props.wrap.removeEventListener("mousemove", onWrapMove);
     props.wrap.removeEventListener("mouseleave", onWrapLeave);
   }
-  // 卸载兜底：若停留横屏则恢复竖屏
+  // 卸载兜底：若停留横屏则恢复竖屏、若停留全屏则恢复系统菜单栏
   restorePortrait();
+  showSystemBars();
   clearTimeout(hideTimer);
   clearTimeout(osdTimer);
   clearTimeout(rateOpenTimer);

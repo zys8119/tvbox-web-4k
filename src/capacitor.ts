@@ -1,8 +1,27 @@
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Nodejs } from "@capawesome/capacitor-nodejs";
 
 export const BACKEND_BASE = "http://127.0.0.1:3001";
 let started = false;
+
+/** 沉浸式系统栏插件（原生端 ImmersiveBarsPlugin）：hide 隐藏状态栏/导航栏，show 恢复 */
+interface ImmersiveBarsPlugin {
+  hide(): Promise<void>;
+  show(): Promise<void>;
+}
+export const ImmersiveBars = registerPlugin<ImmersiveBarsPlugin>("ImmersiveBars");
+
+/** 隐藏系统菜单栏（状态栏 + 导航栏），仅在原生平台有效 */
+export function hideSystemBars(): void {
+  if (!isNative()) return;
+  ImmersiveBars.hide().catch(() => {});
+}
+
+/** 恢复系统菜单栏显示，仅在原生平台有效 */
+export function showSystemBars(): void {
+  if (!isNative()) return;
+  ImmersiveBars.show().catch(() => {});
+}
 
 export function isNative(): boolean {
   return Capacitor.isNativePlatform();

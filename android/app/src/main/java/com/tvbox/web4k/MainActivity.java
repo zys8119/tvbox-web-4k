@@ -15,6 +15,8 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // 注册沉浸式系统栏插件（前端全屏播放时隐藏/恢复系统菜单栏）
+        registerPlugin(ImmersiveBarsPlugin.class);
         Window window = getWindow();
         // 沉浸式 edge-to-edge：布局延伸到系统栏之后，系统栏（状态栏 + 导航栏）
         // 作为透明悬浮层呈现，不占用可视区域（Android 15+ 强制 edge-to-edge，
