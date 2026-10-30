@@ -11,29 +11,19 @@
   "scripts": {
     "dev": "vite --host & tsx watch server/main.ts",
     "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "build:server": "node scripts/build-server.mjs",
-    "apk:prepare": "vite build --mode apk && node scripts/build-server.mjs && cap sync android",
-    "apk:assemble": "cd android && ./gradlew assembleDebug"
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@capacitor/android": "^8.6.0",
-    "@capacitor/core": "^8.6.0",
-    "@capawesome/capacitor-nodejs": "^0.2.0",
     "dompurify": "^3.4.17",
     "hls.js": "^1.5.17",
     "pinyin-pro": "^3.29.5",
-    "sql.js": "^1.15.2",
     "vue": "^3.5.13",
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
-    "@capacitor/cli": "^8.6.0",
     "@iconify-json/carbon": "^1.2.4",
     "@types/node": "^22.9.0",
-    "@types/sql.js": "^1.4.11",
     "@vitejs/plugin-vue": "^5.2.1",
-    "esbuild": "^0.28.2",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "unocss": "^0.64.1",

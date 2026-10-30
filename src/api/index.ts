@@ -1,7 +1,6 @@
 /** 后端 Node 服务（node/main.ts）的接口封装 */
 
-/** 基地址：开发时走 Vite 代理（/api）；APK 内嵌后端时通过 VITE_API_BASE 注入（如 http://127.0.0.1:3001/api） */
-const BASE: string = import.meta.env.VITE_API_BASE ?? "/api";
+const BASE = "/api";
 
 export interface VodItem {
   vod_id: string;

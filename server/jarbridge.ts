@@ -65,25 +65,6 @@ const REQUEST_TIMEOUT_MS = 60000;
 const DIRECT_RE = /^.*\.(mp4|m3u8|flv|mkv|avi|ts|mov|mpd|m4a|wmv)(\?.*)?$/i;
 let compileChecked = false;
 
-/**
- * 当前环境是否可运行 JVM 桥接。
- * APK 内嵌运行时（capawesome/nodejs-mobile 的 Android Node）没有 JVM，
- * 通过 TVBOX_NO_JVM=1 显式关闭，或自动探测 java 可执行文件是否存在。
- */
-export const jvmAvailable: boolean = (() => {
-  if (process.env.TVBOX_NO_JVM === "1") return false;
-  try {
-    const r = spawnSync(pickExecutable("java", "java"), ["-version"], {
-      stdio: "pipe",
-      encoding: "utf8",
-      timeout: 8000,
-    });
-    return (r.status ?? 1) === 0;
-  } catch {
-    return false;
-  }
-})();
-
 type ProcState = {
   proc: ChildProcessWithoutNullStreams;
   pending: Map<string, Pending>;
@@ -273,9 +254,7 @@ async function ensureExternalJar(site: RawSite): Promise<string | null> {
 
   if (existsSync(vmJar)) {
     if (hasDexNative(vmJar)) {
-      throw new Error(
-        "该站点依赖 Android Native(DexNative/.so)，当前服务端 JVM 无法执行",
-      );
+      throw new Error("该站点依赖 Android Native(DexNative/.so)，当前服务端 JVM 无法执行");
     }
     return vmJar;
   }
@@ -323,9 +302,6 @@ async function invokeSpider(
   method: string,
   args: JsonValue[],
 ): Promise<string | null> {
-  if (!jvmAvailable) {
-    throw new Error("当前环境不支持 JVM 站点（无 Java 运行时）");
-  }
   const extraJar = await ensureExternalJar(site);
   const state = ensureProcess(extraJar);
   const id = String(++state.seq);

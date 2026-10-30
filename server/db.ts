@@ -15,16 +15,16 @@
  *   - 查询时传递当前订阅 id；无订阅时返回全部，有订阅时返回 sub_id IN ('', 订阅id)
  *   - 删除订阅时通过 clearBySubscription 级联清理该订阅的数据
  */
+import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import { openDatabase, type SqlDatabase } from "./sqlite.ts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(here, "data");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const db: SqlDatabase = await openDatabase(path.join(DATA_DIR, "app.db"));
+const db = new DatabaseSync(path.join(DATA_DIR, "app.db"));
 
 db.exec(`
   PRAGMA journal_mode = WAL;
