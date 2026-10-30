@@ -1,0 +1,11 @@
+{
+	"appId": "com.tvbox.web4k",
+	"appName": "TVBox 4K",
+	"webDir": "dist",
+	"plugins": {
+		"Nodejs": {
+			"startMode": "manual",
+			"nodeDir": "nodejs"
+		}
+	}
+}

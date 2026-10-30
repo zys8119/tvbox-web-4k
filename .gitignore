@@ -73,6 +73,5 @@ android/.cxx/
 *.db-shm
 *.db-wal
 *.apk
-
 # Java 桥接层编译产物
 server/jarbridge/build/
