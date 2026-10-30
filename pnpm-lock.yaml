@@ -17,6 +17,9 @@ importers:
       '@capawesome/capacitor-nodejs':
         specifier: ^0.2.0
         version: 0.2.0(@capacitor/core@8.6.0)
+      '@capgo/capacitor-screen-orientation':
+        specifier: ^8.4.3
+        version: 8.4.3(@capacitor/core@8.6.0)
       dompurify:
         specifier: ^3.4.17
         version: 3.4.17
@@ -243,6 +246,11 @@ packages:
 
   '@capawesome/capacitor-nodejs@0.2.0':
     resolution: {integrity: sha512-q9ma37Epis+oGckE24RaqqodtsK8Mtl7k3CmIzXX2Yf5J54qvbfFxR+/VIEAG+xujU6MYDYDL9WQlPgNPY+sog==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+
+  '@capgo/capacitor-screen-orientation@8.4.3':
+    resolution: {integrity: sha512-QCcI4VhrOJRl1KHv/la7XF1AF1K11n1Bo6yHXXgYw9wIHjsyvzsnEtI+e3Oef3HUJdInNnzibMwKGDuu3bM7gg==}
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
 
@@ -2235,6 +2243,10 @@ snapshots:
       tslib: 2.8.1
 
   '@capawesome/capacitor-nodejs@0.2.0(@capacitor/core@8.6.0)':
+    dependencies:
+      '@capacitor/core': 8.6.0
+
+  '@capgo/capacitor-screen-orientation@8.4.3(@capacitor/core@8.6.0)':
     dependencies:
       '@capacitor/core': 8.6.0
 

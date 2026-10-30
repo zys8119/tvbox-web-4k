@@ -10,6 +10,7 @@ android {
 apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
 dependencies {
     implementation project(':capawesome-capacitor-nodejs')
+    implementation project(':capgo-capacitor-screen-orientation')
 
 }
 

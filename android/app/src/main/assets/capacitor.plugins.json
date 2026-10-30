@@ -2,5 +2,9 @@
 	{
 		"pkg": "@capawesome/capacitor-nodejs",
 		"classpath": "io.capawesome.capacitorjs.plugins.nodejs.NodejsPlugin"
+	},
+	{
+		"pkg": "@capgo/capacitor-screen-orientation",
+		"classpath": "ee.forgr.capacitor.screenorientation.CapacitorScreenOrientationPlugin"
 	}
 ]

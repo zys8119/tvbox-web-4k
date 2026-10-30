@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { Capacitor } from "@capacitor/core";
+import { ScreenOrientation } from "@capgo/capacitor-screen-orientation";
 
 /**
  * 自定义播放器控制条（替代原生 controls）。
@@ -57,6 +59,10 @@ const volume = ref(1);
 const muted = ref(false);
 const fs = ref(false);
 const visible = ref(false);
+/** 控件锁定（app 防误触）：锁定后控制条隐藏、画面点击/手势全部失效，仅中央解锁按钮可操作 */
+const locked = ref(false);
+/** 控制条是否应展示：未锁定且显隐状态为真 */
+const showBars = computed(() => visible.value && !locked.value);
 /** 是否正在拖拽进度（拖拽时优先展示预览位置） */
 const seeking = ref(false);
 /** 拖拽预览位置（0..1） */
@@ -193,6 +199,18 @@ function openRate() {
 function closeRate() {
   clearTimeout(rateOpenTimer);
   rateOpen.value = false;
+}
+
+/** 暂停时中央播放按钮在锁定态下也由解锁按钮替代，播放键同样隐藏 */
+function toggleLock() {
+  locked.value = !locked.value;
+  if (locked.value) {
+    // 锁定：立即收起控制条与暂停态提示
+    clearTimeout(hideTimer);
+    visible.value = false;
+  } else {
+    poke();
+  }
 }
 
 /* ============================== 显隐控制 ============================== */
@@ -342,21 +360,26 @@ function toggleMute() {
 
 /* ============================== 全屏 ============================== */
 
-/** Screen Orientation API 的 lock/unlock 为实验性接口，不在标准 lib.dom 中 */
+/** Screen Orientation API 的 lock/unlock 为实验性接口，不在标准 lib.dom 中（仅 Web 降级用） */
 interface ScreenOrientationExt extends ScreenOrientation {
   lock(orientation: "landscape" | "portrait"): Promise<void>;
   unlock(): void;
 }
 
 /**
- * 锁横屏并感应重力：landscape 允许 0°/180° 两个方向旋转（传感器横屏），
- * 手机无论左转还是右转都能跟随。WebView 内需处于全屏状态才能生效。
+ * 锁横屏并感应重力：原生平台调用 Capacitor 插件（对应 Android
+ * SCREEN_ORIENTATION_SENSOR_LANDSCAPE，允许 0°/180° 双向跟随重力）；
+ * Web 环境降级使用 screen.orientation.lock（部分浏览器仍支持）。
  */
-function lockLandscape() {
+async function lockLandscape() {
   try {
-    const so = screen.orientation as ScreenOrientationExt | null;
-    if (so && typeof so.lock === "function") {
-      so.lock("landscape").catch(() => { /* 部分环境不支持，忽略 */ });
+    if (Capacitor.isNativePlatform()) {
+      await ScreenOrientation.lock({ orientation: "landscape" });
+    } else {
+      const so = screen.orientation as ScreenOrientationExt | null;
+      if (so && typeof so.lock === "function") {
+        await so.lock("landscape").catch(() => { /* 部分环境不支持，忽略 */ });
+      }
     }
   } catch {
     /* 忽略 */
@@ -364,10 +387,14 @@ function lockLandscape() {
 }
 
 /** 解除方向锁定，恢复系统自动旋转 */
-function unlockOrientation() {
+async function unlockOrientation() {
   try {
-    const so = screen.orientation as ScreenOrientationExt | null;
-    if (so && typeof so.unlock === "function") so.unlock();
+    if (Capacitor.isNativePlatform()) {
+      await ScreenOrientation.unlock();
+    } else {
+      const so = screen.orientation as ScreenOrientationExt | null;
+      if (so && typeof so.unlock === "function") so.unlock();
+    }
   } catch {
     /* 忽略 */
   }
@@ -488,6 +515,7 @@ function onWrapLeave() {
 const GESTURE_FULL_WIDTH_SEC = 300;
 
 function onTouchStart(e: TouchEvent) {
+  if (locked.value) return;
   if (e.touches.length !== 1) return;
   const el = props.video;
   const t = e.touches[0];
@@ -556,6 +584,8 @@ function onTouchEnd() {
  * M 静音，F 全屏。输入框/文本编辑态以及带修饰键（Ctrl/⌘/Alt）的按键不拦截。
  */
 function onKeydown(e: KeyboardEvent) {
+  // 控件锁定时不响应任何播放快捷键（防误触）
+  if (locked.value) return;
   const el = e.target as HTMLElement | null;
   const typing =
     !!el &&
@@ -622,6 +652,8 @@ function onWindowBlur() {
 }
 
 function onVideoClick(e: MouseEvent) {
+  // 控件锁定：画面点击无效（防误触）
+  if (locked.value) return;
   // 仅当事件目标是 video 自身时才切换播放，避免经冒泡到达的点击误触
   if (e.target !== props.video) return;
   // 滑动手势结束后 300ms 内产生的 click 忽略（滑动已 handled）
@@ -630,6 +662,7 @@ function onVideoClick(e: MouseEvent) {
 }
 
 function onVideoDblClick(e: MouseEvent) {
+  if (locked.value) return;
   if (e.target !== props.video) return;
   toggleFs();
 }
@@ -776,135 +809,151 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="video && ready" class="pointer-events-none absolute inset-0 z-10 transition-opacity duration-300"
-    :class="visible ? 'opacity-100' : 'opacity-0'" @click.stop @dblclick.stop>
-    <!-- 顶部渐变条：左侧标题（当前集名称）+ 右侧插槽（片头片尾标记 / 第三方扩展按钮等） -->
-    <div
-      class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3 bg-gradient-to-b from-black/50 to-transparent transition-opacity duration-300"
-      :class="visible ? 'opacity-100' : 'opacity-0'">
-      <div class="pointer-events-auto flex min-w-0 flex-1 items-center">
-        <!-- 全屏状态下左上角返回键：退出全屏并返回上一页 -->
-        <button v-if="fs"
-          class="mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 active:scale-95 transition-all"
-          title="退出全屏并返回" @click="onBackClick">
-          <span class="i-carbon-arrow-left text-base" />
-        </button>
-        <slot name="title" :fs="fs" />
+  <div v-if="video && ready" class="pointer-events-none absolute inset-0 z-10" @click.stop @dblclick.stop>
+    <!-- 控制条整块：未锁定且显隐状态为真时展示（锁定/闲置时整体移除，避免残留可点击区域） -->
+    <div v-show="showBars" class="absolute inset-0">
+      <!-- 顶部渐变条：左侧标题（当前集名称）+ 右侧插槽（片头片尾标记 / 第三方扩展按钮等） -->
+      <div
+        class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3 bg-gradient-to-b from-black/50 to-transparent">
+        <div class="pointer-events-auto flex min-w-0 flex-1 items-center">
+          <!-- 全屏状态下左上角返回键：退出全屏并返回上一页 -->
+          <button v-if="fs"
+            class="mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 active:scale-95 transition-all"
+            title="退出全屏并返回" @click="onBackClick">
+            <span class="i-carbon-arrow-left text-base" />
+          </button>
+          <slot name="title" :fs="fs" />
+        </div>
+        <div class="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
+          <slot name="top" :fs="fs" />
+        </div>
       </div>
-      <div class="pointer-events-auto flex flex-wrap items-center justify-end gap-2">
-        <slot name="top" :fs="fs" />
+
+      <!-- 暂停时中央播放按钮 -->
+      <button v-if="!playing"
+        class="pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-16 w-16 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm hover:bg-black/60 hover:scale-105 transition-all"
+        title="播放" @click="togglePlay">
+        <span class="i-carbon-play-filled text-3xl ml-1" />
+      </button>
+
+      <!-- 视频中心临时提示：音量 / 进度 / 倍速变化时显示，停止操作后自动消失 -->
+      <div class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <div v-if="osdVisible"
+          class="whitespace-nowrap rounded-xl bg-black/60 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm shadow-lg">
+          {{ osdText }}
+        </div>
       </div>
-    </div>
 
-    <!-- 暂停时中央播放按钮 -->
-    <button v-if="!playing"
-      class="pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-16 w-16 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm hover:bg-black/60 hover:scale-105 transition-all"
-      title="播放" @click="togglePlay">
-      <span class="i-carbon-play-filled text-3xl ml-1" />
-    </button>
+      <!-- 底部控制条 -->
+      <div
+        class="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-2 pt-10 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+        <div class="flex items-center gap-2.5">
+          <!-- 播放/暂停 -->
+          <button
+            class="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 active:scale-95 transition-all"
+            :title="playing ? '暂停' : '播放'" @click="togglePlay">
+            <span :class="playing ? 'i-carbon-pause text-lg' : 'i-carbon-play-filled text-lg ml-0.5'" />
+          </button>
 
-    <!-- 视频中心临时提示：音量 / 进度 / 倍速变化时显示，停止操作后自动消失 -->
-    <div class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-      <div v-if="osdVisible"
-        class="whitespace-nowrap rounded-xl bg-black/60 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm shadow-lg">
-        {{ osdText }}
-      </div>
-    </div>
-
-    <!-- 底部控制条 -->
-    <div
-      class="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-2 pt-10 bg-gradient-to-t from-black/70 via-black/30 to-transparent transition-opacity duration-300"
-      :class="visible ? 'opacity-100' : 'opacity-0'">
-      <div class="flex items-center gap-2.5">
-        <!-- 播放/暂停 -->
-        <button
-          class="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 active:scale-95 transition-all"
-          :title="playing ? '暂停' : '播放'" @click="togglePlay">
-          <span :class="playing ? 'i-carbon-pause text-lg' : 'i-carbon-play-filled text-lg ml-0.5'" />
-        </button>
-
-        <!-- 进度条（点击/拖拽定位；拖拽时实时预览时间点与关键帧） -->
-        <div ref="barEl" class="pointer-events-auto group/bar relative flex h-4 flex-1 cursor-pointer items-center py-2"
-          @pointerdown="onSeekDown" @pointermove="onSeekMove" @pointerup="onSeekUp" @pointercancel="onSeekUp">
-          <!-- 拖拽实时浮层：当前时间点 + 关键帧预览（跨域受限时仅显示时间） -->
-          <div v-if="seeking" :style="{ left: thumbLeft }"
-            class="pointer-events-none absolute bottom-5 left-0 z-20 -translate-x-1/2 flex flex-col items-center gap-1 rounded-lg bg-black/85 px-2 py-1.5 shadow-xl">
-            <img v-if="previewImg" :src="previewImg" alt=""
-              class="h-[72px] w-[128px] rounded-md border border-white/15 object-cover" />
-            <span class="text-[11px] font-medium tabular-nums text-white">{{ fmtTime(dragTime) }}</span>
-          </div>
-          <div
-            class="relative h-1 w-full overflow-hidden rounded-full bg-white/20 transition-all group-hover/bar:h-1.5 group-active/bar:h-1.5">
-            <div class="absolute inset-y-0 left-0 bg-white/30" :style="{ width: buffered * 100 + '%' }" />
-            <div class="absolute inset-y-0 left-0 bg-indigo-400" :style="{ width: played * 100 + '%' }">
-              <span
-                class="absolute right-0 top-1/2 h-2.5 w-2.5 -translate-y-1/2 translate-x-1/2 rounded-full bg-white shadow-[0_0_8px_rgba(99,102,241,0.9)]" />
+          <!-- 进度条（点击/拖拽定位；拖拽时实时预览时间点与关键帧） -->
+          <div ref="barEl"
+            class="pointer-events-auto group/bar relative flex h-4 flex-1 cursor-pointer items-center py-2"
+            @pointerdown="onSeekDown" @pointermove="onSeekMove" @pointerup="onSeekUp" @pointercancel="onSeekUp">
+            <!-- 拖拽实时浮层：当前时间点 + 关键帧预览（跨域受限时仅显示时间） -->
+            <div v-if="seeking" :style="{ left: thumbLeft }"
+              class="pointer-events-none absolute bottom-5 left-0 z-20 -translate-x-1/2 flex flex-col items-center gap-1 rounded-lg bg-black/85 px-2 py-1.5 shadow-xl">
+              <img v-if="previewImg" :src="previewImg" alt=""
+                class="h-[72px] w-[128px] rounded-md border border-white/15 object-cover" />
+              <span class="text-[11px] font-medium tabular-nums text-white">{{ fmtTime(dragTime) }}</span>
+            </div>
+            <div
+              class="relative h-1 w-full overflow-hidden rounded-full bg-white/20 transition-all group-hover/bar:h-1.5 group-active/bar:h-1.5">
+              <div class="absolute inset-y-0 left-0 bg-white/30" :style="{ width: buffered * 100 + '%' }" />
+              <div class="absolute inset-y-0 left-0 bg-indigo-400" :style="{ width: played * 100 + '%' }">
+                <span
+                  class="absolute right-0 top-1/2 h-2.5 w-2.5 -translate-y-1/2 translate-x-1/2 rounded-full bg-white shadow-[0_0_8px_rgba(99,102,241,0.9)]" />
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- 时间 -->
-        <span class="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-white/85">
-          {{ fmtTime(currentTime) }} / {{ fmtTime(duration) }}
-        </span>
+          <!-- 时间 -->
+          <span class="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-white/85">
+            {{ fmtTime(currentTime) }} / {{ fmtTime(duration) }}
+          </span>
 
-        <!-- 倍速：悬浮向上展开全部档位，点击直接切换（点击按钮本身仍可循环切换） -->
-        <div class="pointer-events-auto relative shrink-0" @mouseenter="openRate" @mouseleave="closeRate">
-          <div v-if="rateOpen"
-            class="absolute bottom-full left-1/2 z-30 -translate-x-1/2 flex flex-col gap-0.5 rounded-xl border border-white/10 bg-[#0e1017]/95 p-1 pb-1.5 shadow-2xl backdrop-blur-sm">
-            <button v-for="r in RATES" :key="r"
-              class="b-none w-16 rounded-lg px-3 py-1 text-[11px] tabular-nums transition-colors"
-              :class="r === rate ? 'bg-black/60 text-white' : 'text-gray-300 hover:bg-white/15 hover:text-white'"
-              @click="setRate(r)">
-              {{ r }}x
+          <!-- 倍速：悬浮向上展开全部档位，点击直接切换（点击按钮本身仍可循环切换） -->
+          <div class="pointer-events-auto relative shrink-0" @mouseenter="openRate" @mouseleave="closeRate">
+            <div v-if="rateOpen"
+              class="absolute bottom-full left-1/2 z-30 -translate-x-1/2 flex flex-col gap-0.5 rounded-xl border border-white/10 bg-[#0e1017]/95 p-1 pb-1.5 shadow-2xl backdrop-blur-sm">
+              <button v-for="r in RATES" :key="r"
+                class="b-none w-16 rounded-lg px-3 py-1 text-[11px] tabular-nums transition-colors"
+                :class="r === rate ? 'bg-black/60 text-white' : 'text-gray-300 hover:bg-white/15 hover:text-white'"
+                @click="setRate(r)">
+                {{ r }}x
+              </button>
+            </div>
+            <button
+              class="w-10 rounded-full px-2 py-0.5 text-[11px] tabular-nums text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+              :title="`播放速度：当前 ${rate}x（悬浮展开选择，点击循环切换）`" @click="cycleRate">
+              {{ rate }}x
             </button>
           </div>
+
+          <!-- 扩展按钮插槽（第三方插件/自动连播/裁切/切集等） -->
+          <div class="pointer-events-auto flex items-center gap-2.5">
+            <slot name="extras" :fs="fs" />
+          </div>
+
+          <!-- 音量 -->
+          <div class="pointer-events-auto hidden shrink-0 items-center gap-1.5 sm:flex">
+            <button
+              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+              :title="muted || volume === 0 ? '取消静音（快捷键 M）' : '静音（快捷键 M）'" @click="toggleMute">
+              <span
+                :class="muted || volume === 0 ? 'i-carbon-volume-mute text-base' : 'i-carbon-volume-up text-base'" />
+            </button>
+            <input type="range" min="0" max="1" step="0.05" class="w-16 accent-indigo-500" :value="muted ? 0 : volume"
+              @input="onVolumeInput" :title="'音量 ' + Math.round((muted ? 0 : volume) * 100) + '%'" />
+          </div>
+
+          <!-- 下载 -->
           <button
-            class="w-10 rounded-full px-2 py-0.5 text-[11px] tabular-nums text-white/85 hover:bg-white/15 hover:text-white transition-colors"
-            :title="`播放速度：当前 ${rate}x（悬浮展开选择，点击循环切换）`" @click="cycleRate">
-            {{ rate }}x
+            class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+            title="下载当前视频" @click="downloadVideo">
+            <span class="i-carbon-download text-base" />
+          </button>
+
+          <!-- 画中画（视频脱离页面窗口置顶小窗播放，与全屏互斥） -->
+          <button
+            class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors"
+            :class="pipActive ? 'bg-white/15 text-white' : 'text-white/85 hover:bg-white/15 hover:text-white'"
+            :title="pipActive ? '退出画中画' : '画中画'" @click="togglePip">
+            <span class="i-carbon-view-mode-2 text-base" />
+          </button>
+
+          <!-- 全屏 -->
+          <button
+            class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+            :title="fs ? '退出全屏' : '全屏'" @click="toggleFs">
+            <span :class="fs ? 'i-carbon-minimize text-base' : 'i-carbon-maximize text-base'" />
+          </button>
+
+          <!-- 锁定播放控制（app 防误触）：锁定后控制条隐藏、画面交互全部失效 -->
+          <button
+            class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+            title="锁定播放控制" @click="toggleLock">
+            <span class="i-carbon-locked text-base" />
           </button>
         </div>
-
-        <!-- 扩展按钮插槽（第三方插件/自动连播/裁切/切集等） -->
-        <div class="pointer-events-auto flex items-center gap-2.5">
-          <slot name="extras" :fs="fs" />
-        </div>
-
-        <!-- 音量 -->
-        <div class="pointer-events-auto hidden shrink-0 items-center gap-1.5 sm:flex">
-          <button
-            class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
-            :title="muted || volume === 0 ? '取消静音（快捷键 M）' : '静音（快捷键 M）'" @click="toggleMute">
-            <span :class="muted || volume === 0 ? 'i-carbon-volume-mute text-base' : 'i-carbon-volume-up text-base'" />
-          </button>
-          <input type="range" min="0" max="1" step="0.05" class="w-16 accent-indigo-500" :value="muted ? 0 : volume"
-            @input="onVolumeInput" :title="'音量 ' + Math.round((muted ? 0 : volume) * 100) + '%'" />
-        </div>
-
-        <!-- 下载 -->
-        <button
-          class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
-          title="下载当前视频" @click="downloadVideo">
-          <span class="i-carbon-download text-base" />
-        </button>
-
-        <!-- 画中画（视频脱离页面窗口置顶小窗播放，与全屏互斥） -->
-        <button
-          class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors"
-          :class="pipActive ? 'bg-white/15 text-white' : 'text-white/85 hover:bg-white/15 hover:text-white'"
-          :title="pipActive ? '退出画中画' : '画中画'" @click="togglePip">
-          <span class="i-carbon-view-mode-2 text-base" />
-        </button>
-
-        <!-- 全屏 -->
-        <button
-          class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
-          :title="fs ? '退出全屏' : '全屏'" @click="toggleFs">
-          <span :class="fs ? 'i-carbon-minimize text-base' : 'i-carbon-maximize text-base'" />
-        </button>
       </div>
     </div>
+
+    <!-- 控件锁定：画面中央唯一可交互的解锁按钮 -->
+    <button v-if="locked"
+      class="pointer-events-auto absolute left-1/2 top-1/2 z-30 -translate-x-1/2 -translate-y-1/2 flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 hover:scale-105 transition-all"
+      title="解除锁定" @click="toggleLock">
+      <span class="i-carbon-locked text-2xl" />
+    </button>
   </div>
 </template>
 

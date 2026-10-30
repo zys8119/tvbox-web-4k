@@ -20,6 +20,7 @@
     "@capacitor/android": "^8.6.0",
     "@capacitor/core": "^8.6.0",
     "@capawesome/capacitor-nodejs": "^0.2.0",
+    "@capgo/capacitor-screen-orientation": "^8.4.3",
     "dompurify": "^3.4.17",
     "hls.js": "^1.5.17",
     "pinyin-pro": "^3.29.5",
