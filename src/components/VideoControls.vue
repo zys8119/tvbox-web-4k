@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Capacitor } from "@capacitor/core";
 import { ScreenOrientation } from "@capgo/capacitor-screen-orientation";
+import { StatusBar, Style } from "@capacitor/status-bar";
 
 /**
  * 自定义播放器控制条（替代原生 controls）。
@@ -45,10 +46,75 @@ let gesture:
     baseVol: number;
     w: number;
     h: number;
+    /** 画面已放大时单指拖动为平移可视区域（false 时才走快进/音量手势） */
+    pan: boolean;
+    startOffsetX: number;
+    startOffsetY: number;
   }
   | null = null;
 /** 到该时间戳为止忽略 click（滑动后释放产生的 click 不触发播放暂停） */
 let suppressClickUntil = 0;
+
+/** 视频画面缩放：scale 1..4，scale > 1 时单指拖动为平移可视区域 */
+const scale = ref(1);
+const offsetX = ref(0);
+const offsetY = ref(0);
+const SCALE_MIN = 1;
+const SCALE_MAX = 4;
+/** 双指缩放手势状态（双指同时触下后开始，单指手势让位） */
+let pinch:
+  | {
+    startDist: number;
+    startScale: number;
+    startOffsetX: number;
+    startOffsetY: number;
+  }
+  | null = null;
+
+/** 将缩放/平移应用到 video 元素（origin 居中，scale 保持中心点不动） */
+function applyTransform(el: HTMLVideoElement | null, animate = false) {
+  if (!el) return;
+  el.style.transition = animate ? "transform 0.25s ease" : "none";
+  el.style.transform = `translate(${offsetX.value}px, ${offsetY.value}px) scale(${scale.value})`;
+}
+
+/** 双指缩放：以手势中点（屏幕坐标）为锚点缩放，画面跟随手指移动 */
+function handlePinchMove(e: TouchEvent) {
+  if (!pinch || e.touches.length < 2) return;
+  e.preventDefault();
+  poke();
+  const el = props.video;
+  if (!el) return;
+  const t1 = e.touches[0];
+  const t2 = e.touches[1];
+  const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+  const ns = Math.min(
+    SCALE_MAX,
+    Math.max(SCALE_MIN, pinch.startScale * (pinch.startDist > 0 ? dist / pinch.startDist : 1)),
+  );
+  const midX = (t1.clientX + t2.clientX) / 2;
+  const midY = (t1.clientY + t2.clientY) / 2;
+  const w = el.clientWidth;
+  const h = el.clientHeight;
+  // 反推未变换前的布局中心：当前 rect 中心减去已有 offset（transform 中心缩放不改变中心）
+  const rect = el.getBoundingClientRect();
+  const baseCX = rect.left + rect.width / 2 - offsetX.value;
+  const baseCY = rect.top + rect.height / 2 - offsetY.value;
+  // 锚定手势中点不动：offset' = (g - baseC)*(1 - k) + offset，k = ns / pinch.startScale
+  const k = pinch.startScale > 0 ? ns / pinch.startScale : ns;
+  let ox = (midX - baseCX) * (1 - k) + pinch.startOffsetX;
+  let oy = (midY - baseCY) * (1 - k) + pinch.startOffsetY;
+  // 限制平移范围：内容放大部分允许的最大位移
+  const rx = (w * ns - w) / 2;
+  const ry = (h * ns - h) / 2;
+  ox = Math.max(-rx, Math.min(rx, ox));
+  oy = Math.max(-ry, Math.min(ry, oy));
+  scale.value = ns;
+  offsetX.value = ox;
+  offsetY.value = oy;
+  applyTransform(el);
+  showOsd(`${Math.round(ns * 100)}%`);
+}
 
 const playing = ref(false);
 const ready = ref(false);
@@ -516,10 +582,25 @@ const GESTURE_FULL_WIDTH_SEC = 300;
 
 function onTouchStart(e: TouchEvent) {
   if (locked.value) return;
-  if (e.touches.length !== 1) return;
   const el = props.video;
-  const t = e.touches[0];
   const w = props.wrap;
+  // 双指同时触下：进入双指缩放（让位于单指快进/音量手势）
+  if (e.touches.length === 2) {
+    gesture = null;
+    const t1 = e.touches[0];
+    const t2 = e.touches[1];
+    pinch = {
+      startDist: Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY),
+      startScale: scale.value,
+      startOffsetX: offsetX.value,
+      startOffsetY: offsetY.value,
+    };
+    e.preventDefault();
+    return;
+  }
+  if (pinch) return; // 缩放中，忽略额外单指
+  if (e.touches.length !== 1) return;
+  const t = e.touches[0];
   gesture = {
     startX: t.clientX,
     startY: t.clientY,
@@ -528,6 +609,10 @@ function onTouchStart(e: TouchEvent) {
     baseVol: el?.volume ?? 1,
     w: w?.clientWidth || el?.clientWidth || window.innerWidth,
     h: w?.clientHeight || el?.clientHeight || window.innerHeight,
+    /** 画面已放大时单指拖动为平移可视区域 */
+    pan: scale.value > 1,
+    startOffsetX: offsetX.value,
+    startOffsetY: offsetY.value,
   };
 }
 
