@@ -8,6 +8,7 @@ import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 
+import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -19,27 +20,32 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * 沉浸式系统栏插件：隐藏/恢复状态栏与导航栏。
+ * 沉浸式系统栏插件：隐藏/恢复状态栏与导航栏（“直接关闭菜单栏”）。
  * 全屏播放时前端调用 hide()，退出全屏调用 show()。
  *
- * 隐藏手段（三重叠加，提高可靠性）：
+ * 隐藏手段（多路叠加 + 轨道式压制，保证菜单栏真正被关闭）：
  * 1. WindowInsetsControllerCompat.hide()（Android 11+ 标准手段）；
- * 2. 窗口级 FLAG_FULLSCREEN（强隐藏头部状态栏的手段）；
- * 3. legacy View.SYSTEM_UI_FLAG_*（Android 10 及以下）；
- * 并重复延迟执行，对抗 WebView 全屏 custom view 切换瞬间系统重新显示状态栏。
+ * 2. 窗口级 FLAG_FULLSCREEN（Android 15 以下有效，更高版本忽略但无害）；
+ * 3. legacy View.SYSTEM_UI_FLAG_*（Android 10 及以下仍需）；
+ * 4. insets 即时响应：压制态下 decor 层一旦监测到系统栏重现，立刻再次隐藏
+ *    （对抗全屏 custom view 切换、锁屏/通知栏/最近任务等造成系统栏重显的情形）；
+ * 5. 周期兜底：压制态下后台按“快->稳”节奏反复隐藏，直到前端 show() 解除压制。
+ *
+ * 说明：Android 的“游戏模式”（GameManager#setGameMode）需要系统级签名权限，
+ * 普通 App 无法调用；此处“直接关闭菜单栏”的强制沉浸式隐藏即等效效果。
  */
 @CapacitorPlugin(name = "ImmersiveBars")
 public class ImmersiveBarsPlugin extends Plugin {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
 
-    /** 是否处于隐藏态：为 true 时延迟重试继续生效；show() 后置 false 中止 */
+    /** 压制态：为 true 时持续把系统栏隐藏（insets 即时响应 + 周期兜底），show() 后置 false 中止 */
     private volatile boolean pendingHide = false;
     private Runnable hideRetry;
-
-    /** 延迟重试间隔（毫秒）：全屏切换/方向锁定时系统栏多次被系统或 WebView 重新显示，
-     *  延长压制窗口，直到用户主动退出全屏（show()）为止 */
-    private static final int[] RETRY_DELAYS = {200, 500, 1000, 2000, 4000, 8000, 12000, 18000, 30000};
+    /** 压制态收尾的稳定兜底间隔（毫秒） */
+    private static final long PERSIST_INTERVAL = 3000;
+    /** 进入压制态后的快速重试节奏（毫秒），随后转入 PERSIST_INTERVAL 稳定兜底 */
+    private static final long[] QUICK_DELAYS = {150, 350, 700, 1200, 2000};
 
     private WindowInsetsControllerCompat controller() {
         Window window = getActivity().getWindow();
@@ -57,7 +63,7 @@ public class ImmersiveBarsPlugin extends Plugin {
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
         controller.hide(WindowInsetsCompat.Type.systemBars());
 
-        // 2) 窗口级 FLAG_FULLSCREEN：强隐藏头部状态栏（所有 API 级别可用）
+        // 2) 窗口级 FLAG_FULLSCREEN：强隐藏头部状态栏
         window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
         // 3) legacy flags（Android 10 及以下仍需；11+ 已废弃但保留无害）
@@ -70,27 +76,47 @@ public class ImmersiveBarsPlugin extends Plugin {
                         | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
     }
 
+    /**
+     * 注册 decor 视图的 insets 监听（被动观察，不消费 insets）：
+     * 压制态下系统栏（状态栏/导航栏）一旦重新变成可见，立即再隐藏。
+     * 相比定时重试这是“即时响应”，全屏 custom view 切换、通知栏下拉、
+     * 锁屏/最近任务返回等瞬间触发的重显都能被第一时间压制。
+     */
+    private void watchInsets(View decorView) {
+        ViewCompat.setOnApplyWindowInsetsListener(decorView, (v, insets) -> {
+            if (pendingHide) {
+                if (insets.isVisible(WindowInsetsCompat.Type.statusBars())
+                        || insets.isVisible(WindowInsetsCompat.Type.navigationBars())) {
+                    applyHide();
+                }
+            }
+            return insets; // 原样透传，不干扰子视图的正常 insets 分发
+        });
+    }
+
     /** 隐藏状态栏与导航栏（沉浸式：滑动屏幕边缘可临时唤出，短暂停留后自动收起） */
     @PluginMethod
     public void hide(PluginCall call) {
         getActivity().runOnUiThread(() -> {
             pendingHide = true;
+            View decorView = getActivity().getWindow().getDecorView();
+            watchInsets(decorView);
             applyHide();
-            // 全屏切换（WebView custom view）期间系统可能重新显示系统栏，延迟重复执行
+            // 压制态：先按快速节奏反复隐藏（对抗全屏切换/方向锁定的瞬态重显），
+            // 之后转稳定兜底持续压制，直到前端主动 show()。
             if (hideRetry != null) handler.removeCallbacks(hideRetry);
             hideRetry = new Runnable() {
-                int index = 0;
+                int n = 0;
 
                 @Override
                 public void run() {
                     if (!pendingHide) return;
                     applyHide();
-                    if (++index < RETRY_DELAYS.length) {
-                        handler.postDelayed(this, RETRY_DELAYS[index]);
-                    }
+                    long delay = n < QUICK_DELAYS.length ? QUICK_DELAYS[n++] : PERSIST_INTERVAL;
+                    handler.postDelayed(this, delay);
                 }
             };
-            handler.postDelayed(hideRetry, RETRY_DELAYS[0]);
+            handler.postDelayed(hideRetry, 100);
         });
         call.resolve();
     }

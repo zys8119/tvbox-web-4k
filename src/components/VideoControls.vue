@@ -62,8 +62,6 @@ let suppressClickUntil = 0;
 
 /** 单击判定窗口（毫秒）：窗口内再次点击视为双击 */
 const TAP_TIMEOUT = 250;
-/** 单击延迟确认计时器（App 模式：单击延迟后切换控制条显隐，双击取消该动作） */
-let tapTimer: ReturnType<typeof setTimeout> | undefined;
 /** 上一次点击时间戳，用于双击判定 */
 let lastTapAt = 0;
 
@@ -853,23 +851,24 @@ function toggleBars() {
   }
 }
 
-/** App 端单击/双击判定：250ms 内再次点击判为双击 → 播放/暂停；
- *  单次点击延迟确认后切换控制条显隐（避免双击误先隐藏控制条）。
- *  由 touchend（主流）或 click（兜底）调用。 */
+/**
+ * App 端单击/双击判定（无延迟确认，单击立即反馈）：
+ * - 单击：立即切换控制条显隐（不等定时器，WebView 中定时器链路不可靠，易导致"单击没反应"）；
+ * - 双击（TAP_TIMEOUT 内第二次点）：先回滚上一次单击的显隐切换，再执行播放/暂停，
+ *   净效果 = 控制条保持原状 + 播放状态翻转。
+ * 由 touchend（主流）或 click（兜底）调用。
+ */
 function handleAppTap() {
   const now = Date.now();
   if (now - lastTapAt < TAP_TIMEOUT) {
-    clearTimeout(tapTimer);
+    // 双击：撤销单击刚做的显隐切换，再切换播放/暂停
     lastTapAt = 0;
+    toggleBars();
     togglePlay();
     return;
   }
   lastTapAt = now;
-  clearTimeout(tapTimer);
-  tapTimer = setTimeout(() => {
-    lastTapAt = 0;
-    toggleBars();
-  }, TAP_TIMEOUT);
+  toggleBars();
 }
 
 function onVideoClick(e: MouseEvent) {
@@ -1043,7 +1042,6 @@ onBeforeUnmount(() => {
   clearTimeout(hideTimer);
   clearTimeout(osdTimer);
   clearTimeout(rateOpenTimer);
-  clearTimeout(tapTimer);
   stopSeekHold();
 });
 </script>
