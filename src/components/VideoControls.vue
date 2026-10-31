@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Capacitor } from "@capacitor/core";
 import { ScreenOrientation } from "@capgo/capacitor-screen-orientation";
-import { hideSystemBars, showSystemBars } from "../capacitor";
+import { hideSystemBars, refreshSystemInsets, showSystemBars } from "../capacitor";
 
 /** 当前是否为原生平台（App 模式）：改变画面点击/双击交互语义 */
 const IS_NATIVE = Capacitor.isNativePlatform();
@@ -529,6 +529,12 @@ function onFsChange() {
     // 退出全屏：恢复系统菜单栏显示
     showSystemBars();
   }
+  // 全屏切换后刷新系统栏 insets：
+  // - 隐藏成功 → 变量归零，控制条无额外偏移（画面铺满）；
+  // - 隐藏失败/系统重显 → 变量反映真实高度，顶部/底部控制条按 inset 下移，避免被系统栏遮挡。
+  // 隐藏是延迟重试式，可能过一会才生效，故稍后再次刷新。
+  refreshSystemInsets();
+  setTimeout(refreshSystemInsets, 800);
   poke();
 }
 
@@ -1009,13 +1015,15 @@ onBeforeUnmount(() => {
   <div v-if="video && ready" class="pointer-events-none absolute inset-0 z-10" @click.stop @dblclick.stop>
     <!-- 控制条整块：未锁定且显隐状态为真时展示（锁定/闲置时整体移除，避免残留可点击区域） -->
     <div v-show="showBars" class="absolute inset-0">
-      <!-- 顶部渐变条：左侧标题（当前集名称）+ 右侧插槽（片头片尾标记 / 第三方扩展按钮等） -->
+      <!-- 顶部渐变条：左侧标题（当前集名称）+ 右侧插槽（片头片尾标记 / 第三方扩展按钮等）
+       安全区：paddingTop 叠加系统状态栏高度（--sys-inset-top），避免遮挡/偏移 -->
       <div
-        class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3 bg-gradient-to-b from-black/50 to-transparent">
+        class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3 bg-gradient-to-b from-black/50 to-transparent"
+        :style="fs ? { paddingTop: 'calc(0.75rem + var(--sys-inset-top, 0px))' } : {}">
         <div class="pointer-events-auto flex min-w-0 flex-1 items-center">
           <!-- 全屏状态下左上角返回键：退出全屏并返回上一页 -->
           <button v-if="fs"
-            class="mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 active:scale-95 transition-all"
+            class="mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:border-white/25 hover:bg-white/25 hover:shadow-[0_4px_14px_rgba(0,0,0,0.45)] active:scale-90"
             title="退出全屏并返回" @click="onBackClick">
             <span class="i-carbon-arrow-left text-base" />
           </button>
@@ -1027,10 +1035,9 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 暂停时中央播放按钮 -->
-      <button v-if="!playing"
-        class="pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-16 w-16 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm hover:bg-black/60 hover:scale-105 transition-all"
-        title="播放" @click="togglePlay">
-        <span class="i-carbon-play-filled text-3xl ml-1" />
+      <button v-if="!playing" title="播放" @click="togglePlay"
+        class="pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-20 w-20 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white shadow-[0_8px_32px_rgba(0,0,0,0.55)] backdrop-blur-md transition-all duration-200 hover:scale-110 hover:border-white/35 hover:bg-black/60 hover:shadow-[0_10px_40px_rgba(255,255,255,0.18)] active:scale-95">
+        <span class="i-carbon-play-filled ml-1 text-4xl drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]" />
       </button>
 
       <!-- 视频中心临时提示：音量 / 进度 / 倍速变化时显示，停止操作后自动消失 -->
@@ -1041,13 +1048,14 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <!-- 底部控制条 -->
+      <!-- 底部控制条（安全区：paddingBottom 叠加系统导航栏高度 --sys-inset-bottom） -->
       <div
-        class="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-2 pt-10 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+        class="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-2 pt-10 bg-gradient-to-t from-black/70 via-black/30 to-transparent"
+        :style="fs ? { paddingBottom: 'calc(0.5rem + var(--sys-inset-bottom, 0px))' } : {}">
         <div class="flex items-center gap-2.5">
           <!-- 播放/暂停 -->
           <button
-            class="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/30 active:scale-95 transition-all"
+            class="pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white shadow-md backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:border-white/30 hover:bg-white/25 hover:shadow-[0_4px_14px_rgba(0,0,0,0.45)] active:scale-90"
             :title="playing ? '暂停' : '播放'" @click="togglePlay">
             <span :class="playing ? 'i-carbon-pause text-lg' : 'i-carbon-play-filled text-lg ml-0.5'" />
           </button>
@@ -1090,7 +1098,7 @@ onBeforeUnmount(() => {
               </button>
             </div>
             <button
-              class="w-10 rounded-full px-2 py-0.5 text-[11px] tabular-nums text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+              class="w-12 rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[11px] font-medium tabular-nums text-white/90 backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:border-white/25 hover:bg-white/20 hover:text-white active:scale-95"
               :title="`播放速度：当前 ${rate}x（悬浮展开选择，点击循环切换）`" @click="cycleRate">
               {{ rate }}x
             </button>
@@ -1104,40 +1112,42 @@ onBeforeUnmount(() => {
           <!-- 音量 -->
           <div class="pointer-events-auto hidden shrink-0 items-center gap-1.5 sm:flex">
             <button
-              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+              class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white/85 backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:border-white/25 hover:bg-white/20 hover:text-white hover:shadow-[0_4px_14px_rgba(0,0,0,0.4)] active:scale-90"
               :title="muted || volume === 0 ? '取消静音（快捷键 M）' : '静音（快捷键 M）'" @click="toggleMute">
               <span
                 :class="muted || volume === 0 ? 'i-carbon-volume-mute text-base' : 'i-carbon-volume-up text-base'" />
             </button>
-            <input type="range" min="0" max="1" step="0.05" class="w-16 accent-indigo-500" :value="muted ? 0 : volume"
+            <input type="range" min="0" max="1" step="0.05" class="w-16 accent-indigo-400" :value="muted ? 0 : volume"
               @input="onVolumeInput" :title="'音量 ' + Math.round((muted ? 0 : volume) * 100) + '%'" />
           </div>
 
           <!-- 下载 -->
           <button
-            class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+            class="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white/85 backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:border-white/25 hover:bg-white/20 hover:text-white hover:shadow-[0_4px_14px_rgba(0,0,0,0.4)] active:scale-90"
             title="下载当前视频" @click="downloadVideo">
             <span class="i-carbon-download text-base" />
           </button>
 
           <!-- 画中画（视频脱离页面窗口置顶小窗播放，与全屏互斥） -->
           <button
-            class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors"
-            :class="pipActive ? 'bg-white/15 text-white' : 'text-white/85 hover:bg-white/15 hover:text-white'"
+            class="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:shadow-[0_4px_14px_rgba(0,0,0,0.4)] active:scale-90"
+            :class="pipActive
+              ? 'bg-white/20 text-white border-white/25'
+              : 'bg-white/10 text-white/85 border-white/10 hover:border-white/25 hover:bg-white/20 hover:text-white'"
             :title="pipActive ? '退出画中画' : '画中画'" @click="togglePip">
             <span class="i-carbon-view-mode-2 text-base" />
           </button>
 
           <!-- 全屏 -->
           <button
-            class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+            class="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white/85 backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:border-white/25 hover:bg-white/20 hover:text-white hover:shadow-[0_4px_14px_rgba(0,0,0,0.4)] active:scale-90"
             :title="fs ? '退出全屏' : '全屏'" @click="toggleFs">
             <span :class="fs ? 'i-carbon-minimize text-base' : 'i-carbon-maximize text-base'" />
           </button>
 
           <!-- 锁定播放控制（app 防误触）：锁定后控制条隐藏、画面交互全部失效 -->
           <button
-            class="pointer-events-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/85 hover:bg-white/15 hover:text-white transition-colors"
+            class="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white/85 backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:border-white/25 hover:bg-white/20 hover:text-white hover:shadow-[0_4px_14px_rgba(0,0,0,0.4)] active:scale-90"
             title="锁定播放控制" @click="toggleLock">
             <span class="i-carbon-locked text-base" />
           </button>
@@ -1145,11 +1155,11 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- 控件锁定：画面中央唯一可交互的解锁按钮 -->
-    <button v-if="locked"
-      class="pointer-events-auto absolute left-1/2 top-1/2 z-30 -translate-x-1/2 -translate-y-1/2 flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 hover:scale-105 transition-all"
-      title="解除锁定" @click="toggleLock">
-      <span class="i-carbon-locked text-2xl" />
+    <!-- 控件锁定：画面右侧中部的解锁按钮
+       （缩小尺寸、非悬浮时图标半透明弱化，鼠标进入后恢复全透明） -->
+    <button v-if="locked" title="解除锁定" @click="toggleLock"
+      class="group pointer-events-auto absolute right-6 top-1/2 z-30 -translate-y-1/2 flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/50 text-white shadow-lg backdrop-blur-md transition-all duration-200 hover:scale-105 hover:border-white/30 hover:bg-black/65 active:scale-95">
+      <span class="i-carbon-locked text-xl opacity-50 transition-opacity duration-200 group-hover:opacity-100" />
     </button>
   </div>
 </template>

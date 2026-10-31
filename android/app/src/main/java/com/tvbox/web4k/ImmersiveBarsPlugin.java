@@ -5,12 +5,14 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.view.Window;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -35,8 +37,9 @@ public class ImmersiveBarsPlugin extends Plugin {
     private volatile boolean pendingHide = false;
     private Runnable hideRetry;
 
-    /** 延迟重试间隔（毫秒）：全屏切换/方向锁定时系统栏多次被系统或 WebView 重新显示 */
-    private static final int[] RETRY_DELAYS = {200, 500, 1200, 2500, 5000, 10000};
+    /** 延迟重试间隔（毫秒）：全屏切换/方向锁定时系统栏多次被系统或 WebView 重新显示，
+     *  延长压制窗口，直到用户主动退出全屏（show()）为止 */
+    private static final int[] RETRY_DELAYS = {200, 500, 1000, 2000, 4000, 8000, 12000, 18000, 30000};
 
     private WindowInsetsControllerCompat controller() {
         Window window = getActivity().getWindow();
@@ -119,5 +122,48 @@ public class ImmersiveBarsPlugin extends Plugin {
             }
         });
         call.resolve();
+    }
+
+    /** 返回系统栏当前实际高度（px）：top=状态栏高度（隐藏时为 0），bottom=导航栏高度（隐藏时为 0）。 */
+    @PluginMethod
+    public void getInsets(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            int top = 0;
+            int bottom = 0;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                WindowInsets insets =
+                        getActivity().getWindow().getDecorView().getRootWindowInsets();
+                if (insets != null) {
+                    // getInsets 返回"当前可见"的系统栏 insets：隐藏时返回 0，
+                    // 与前端全屏隐藏逻辑保持一致（隐藏成功后无需额外偏移）
+                    android.graphics.Insets statusBar =
+                            insets.getInsets(WindowInsets.Type.statusBars());
+                    android.graphics.Insets navBar =
+                            insets.getInsets(WindowInsets.Type.navigationBars());
+                    top = statusBar.top;
+                    bottom = navBar.bottom;
+                }
+            } else {
+                // Android 10 及以下无 WindowInsets API，读取系统资源兜底
+                top = systemBarDimension("status_bar_height");
+                bottom = systemBarDimension("navigation_bar_height");
+            }
+            JSObject ret = new JSObject();
+            ret.put("top", top);
+            ret.put("bottom", bottom);
+            call.resolve(ret);
+        });
+    }
+
+    /** 读取系统资源定义的系统栏高度（px），找不到时返回 0 */
+    private int systemBarDimension(String name) {
+        try {
+            int id = getActivity().getResources()
+                    .getIdentifier(name, "dimen", "android");
+            if (id > 0) return getActivity().getResources().getDimensionPixelSize(id);
+        } catch (Exception ignored) {
+            /* 忽略，返回 0 */
+        }
+        return 0;
     }
 }

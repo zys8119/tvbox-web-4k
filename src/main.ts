@@ -4,7 +4,11 @@ import "virtual:uno.css";
 import "./style.css";
 import { Capacitor } from "@capacitor/core";
 import { App as CapApp } from "@capacitor/app";
-import { startEmbeddedBackend, useEmbeddedBackend } from "./capacitor";
+import {
+  refreshSystemInsets,
+  startEmbeddedBackend,
+  useEmbeddedBackend,
+} from "./capacitor";
 import App from "./App.vue";
 import Home from "./views/Home.vue";
 import Category from "./views/Category.vue";
@@ -42,6 +46,8 @@ async function bootstrap(): Promise<void> {
     await startEmbeddedBackend();
   }
   createApp(App).use(router).mount("#app");
+  // 初始化系统栏 insets CSS 变量（--sys-inset-top/bottom），供全屏控制条与弹层面板安全区偏移
+  void refreshSystemInsets();
   // 原生平台（Android/iOS）接管系统返回键
   if (Capacitor.isNativePlatform()) {
     registerBackButton();

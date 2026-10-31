@@ -26,9 +26,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
 </script>
 
 <template>
-  <!-- 右侧选集面板：相对视频容器定位，宽度为视频的一半、高度撑满，左侧遮罩点击关闭 -->
-  <div class="ep-picker-open absolute inset-0 z-50 flex bg-black/50 backdrop-blur-sm" @click.self="emit('close')">
-    <div class="ml-auto flex h-full w-1/2 min-w-0 flex-col border-l border-white/10 bg-[#0e1017] shadow-2xl">
+  <!-- 右侧选集面板：非全屏时相对整个手机屏幕定位（position:fixed）。
+       全屏时容器即全屏画面，fixed 同样铺满；顶部预留状态栏安全区（--sys-inset-top） -->
+  <div class="ep-picker-open fixed inset-0 z-50 flex bg-black/50 backdrop-blur-sm" @click.self="emit('close')">
+    <div class="ml-auto flex h-full w-1/2 min-w-0 flex-col border-l border-white/10 bg-[#0e1017] shadow-2xl"
+      :style="{ paddingTop: 'var(--sys-inset-top, 0px)' }">
       <div class="flex items-center justify-between border-b border-white/5 px-4 py-3.5">
         <h3 class="text-sm font-medium">
           {{ title ?? "选集" }}

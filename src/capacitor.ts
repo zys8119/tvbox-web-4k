@@ -8,8 +8,27 @@ let started = false;
 interface ImmersiveBarsPlugin {
   hide(): Promise<void>;
   show(): Promise<void>;
+  getInsets(): Promise<{ top: number; bottom: number }>;
 }
 export const ImmersiveBars = registerPlugin<ImmersiveBarsPlugin>("ImmersiveBars");
+
+/** 读取系统栏当前可见高度（px），并将其写入全局 CSS 变量，供全屏控制条做安全区偏移 */
+export async function refreshSystemInsets(): Promise<void> {
+  let top = 0;
+  let bottom = 0;
+  if (isNative()) {
+    try {
+      const insets = await ImmersiveBars.getInsets();
+      top = insets.top;
+      bottom = insets.bottom;
+    } catch {
+      /* 读取失败时按 0 处理 */
+    }
+  }
+  const root = document.documentElement;
+  root.style.setProperty("--sys-inset-top", `${top}px`);
+  root.style.setProperty("--sys-inset-bottom", `${bottom}px`);
+}
 
 /** 隐藏系统菜单栏（状态栏 + 导航栏），仅在原生平台有效 */
 export function hideSystemBars(): void {
