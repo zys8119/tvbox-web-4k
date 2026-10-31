@@ -141,6 +141,21 @@ const visible = ref(false);
 const locked = ref(false);
 /** 控制条是否应展示：未锁定且显隐状态为真 */
 const showBars = computed(() => visible.value && !locked.value);
+/** App 端非全屏紧凑模式：视频容器宽度有限，隐藏低频按钮（下载/画中画），避免底部控制条溢出、核心按钮（全屏等）显示不全 */
+const compact = computed(() => IS_NATIVE && !fs.value);
+/**
+ * 顶部渐变条 paddingTop：全屏时叠加系统状态栏高度，避免顶部按钮被遮挡。
+ * App 端采用「隐藏系统栏 + 固定下移一个按钮高度」双保险：
+ * max(40px, --sys-inset-top) 保证至少下移一个按钮高度（约 40px），
+ * 即便系统栏隐藏失败且 insets 反馈滞后，顶部按钮也不会被遮挡。
+ */
+const topBarStyle = computed(() => {
+  if (!fs.value) return {};
+  const padTop = IS_NATIVE
+    ? "calc(0.75rem + max(40px, var(--sys-inset-top, 0px)))"
+    : "calc(0.75rem + var(--sys-inset-top, 0px))";
+  return { paddingTop: padTop };
+});
 /** 是否正在拖拽进度（拖拽时优先展示预览位置） */
 const seeking = ref(false);
 /** 拖拽预览位置（0..1） */
@@ -731,12 +746,27 @@ function onTouchMove(e: TouchEvent) {
   }
 }
 
-function onTouchEnd() {
+function onTouchEnd(e: TouchEvent) {
+  const wasSwipe = !!(gesture && gesture.dir);
   // 发生过滑动：抑制随后产生的 click，避免误触发播放暂停
-  if (gesture && gesture.dir) suppressClickUntil = Date.now() + 300;
+  if (wasSwipe) suppressClickUntil = Date.now() + 300;
+  // App 端：轻触（无滑动、非捏合、位移极小）直接在 touchend 判定单击/双击。
+  // WebView 对 video 合成 click 在部分机型/全屏状态下不可靠，改由触摸事件驱动。
+  const isTap =
+    !wasSwipe &&
+    !pinch &&
+    !!gesture &&
+    e.changedTouches.length === 1 &&
+    Math.abs(e.changedTouches[0].clientX - gesture.startX) < 10 &&
+    Math.abs(e.changedTouches[0].clientY - gesture.startY) < 10;
   gesture = null;
   // 双指捏合结束（任一指离开）：复位捏合状态，后续单指回落为点击/平移
   pinch = null;
+  if (IS_NATIVE && isTap && !locked.value) {
+    // 已由 touchend 处理轻触，抑制随后合成的 click，避免重复触发显隐切换
+    suppressClickUntil = Date.now() + 500;
+    handleAppTap();
+  }
 }
 
 /* ============================== 键盘快捷键 ============================== */
@@ -823,20 +853,10 @@ function toggleBars() {
   }
 }
 
-function onVideoClick(e: MouseEvent) {
-  // 控件锁定：画面点击无效（防误触）
-  if (locked.value) return;
-  // 仅当事件目标是 video 自身时才切换播放，避免经冒泡到达的点击误触
-  if (e.target !== props.video) return;
-  // 滑动手势结束后 300ms 内产生的 click 忽略（滑动已 handled）
-  if (Date.now() < suppressClickUntil) return;
-  // Web 模式（浏览器）：单击切换播放/暂停，维持原有交互
-  if (!IS_NATIVE) {
-    togglePlay();
-    return;
-  }
-  // App 模式：250ms 内再次点击判为双击 → 播放/暂停；
-  // 单次点击延迟确认后切换控制条显隐（避免双击误先隐藏控制条）
+/** App 端单击/双击判定：250ms 内再次点击判为双击 → 播放/暂停；
+ *  单次点击延迟确认后切换控制条显隐（避免双击误先隐藏控制条）。
+ *  由 touchend（主流）或 click（兜底）调用。 */
+function handleAppTap() {
   const now = Date.now();
   if (now - lastTapAt < TAP_TIMEOUT) {
     clearTimeout(tapTimer);
@@ -850,6 +870,23 @@ function onVideoClick(e: MouseEvent) {
     lastTapAt = 0;
     toggleBars();
   }, TAP_TIMEOUT);
+}
+
+function onVideoClick(e: MouseEvent) {
+  // 控件锁定：画面点击无效（防误触）
+  if (locked.value) return;
+  // 仅当事件目标是 video 自身时才切换播放，避免经冒泡到达的点击误触
+  if (e.target !== props.video) return;
+  // 滑动手势结束后 300ms 内产生的 click 忽略（滑动已 handled）
+  if (Date.now() < suppressClickUntil) return;
+  // Web 模式（浏览器）：单击切换播放/暂停，维持原有交互
+  if (!IS_NATIVE) {
+    togglePlay();
+    return;
+  }
+  // App 模式：轻触多数已由 touchend 处理并抑制 click；
+  // 此处为 WebView 未触发 touch 事件（外接鼠标/部分遥控器）时的兜底
+  handleAppTap();
 }
 
 function onVideoDblClick(e: MouseEvent) {
@@ -1013,13 +1050,15 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="video && ready" class="pointer-events-none absolute inset-0 z-10" @click.stop @dblclick.stop>
-    <!-- 控制条整块：未锁定且显隐状态为真时展示（锁定/闲置时整体移除，避免残留可点击区域） -->
-    <div v-show="showBars" class="absolute inset-0">
+    <!-- 控制条整块：未锁定且显隐状态为真时展示（锁定/闲置时整体移除，避免残留可点击区域）
+     注意：容器必须 pointer-events-none，让空白区域点击穿透到 video（单击显隐切换）；
+     内部所有可交互按钮均已单独声明 pointer-events-auto -->
+    <div v-show="showBars" class="pointer-events-none absolute inset-0">
       <!-- 顶部渐变条：左侧标题（当前集名称）+ 右侧插槽（片头片尾标记 / 第三方扩展按钮等）
        安全区：paddingTop 叠加系统状态栏高度（--sys-inset-top），避免遮挡/偏移 -->
       <div
         class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3 bg-gradient-to-b from-black/50 to-transparent"
-        :style="fs ? { paddingTop: 'calc(0.75rem + var(--sys-inset-top, 0px))' } : {}">
+        :style="topBarStyle">
         <div class="pointer-events-auto flex min-w-0 flex-1 items-center">
           <!-- 全屏状态下左上角返回键：退出全屏并返回上一页 -->
           <button v-if="fs"
@@ -1035,24 +1074,28 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- 暂停时中央播放按钮 -->
-      <button v-if="!playing" title="播放" @click="togglePlay"
-        class="pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-20 w-20 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white shadow-[0_8px_32px_rgba(0,0,0,0.55)] backdrop-blur-md transition-all duration-200 hover:scale-110 hover:border-white/35 hover:bg-black/60 hover:shadow-[0_10px_40px_rgba(255,255,255,0.18)] active:scale-95">
-        <span class="i-carbon-play-filled ml-1 text-4xl drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]" />
-      </button>
+      <Transition name="fade">
+        <button v-if="!playing" title="播放" @click="togglePlay"
+          class="pointer-events-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex h-20 w-20 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white shadow-[0_8px_32px_rgba(0,0,0,0.55)] backdrop-blur-md transition-all duration-200 hover:scale-110 hover:border-white/35 hover:bg-black/60 hover:shadow-[0_10px_40px_rgba(255,255,255,0.18)] active:scale-95">
+          <span class="i-carbon-play-filled ml-1 text-4xl drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]" />
+        </button>
+      </Transition>
 
       <!-- 视频中心临时提示：音量 / 进度 / 倍速变化时显示，停止操作后自动消失 -->
       <div class="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-        <div v-if="osdVisible"
-          class="whitespace-nowrap rounded-xl bg-black/60 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm shadow-lg">
-          {{ osdText }}
-        </div>
+        <Transition name="fade">
+          <div v-if="osdVisible"
+            class="whitespace-nowrap rounded-xl bg-black/60 px-4 py-2 text-sm font-medium text-white backdrop-blur-sm shadow-lg">
+            {{ osdText }}
+          </div>
+        </Transition>
       </div>
 
       <!-- 底部控制条（安全区：paddingBottom 叠加系统导航栏高度 --sys-inset-bottom） -->
       <div
         class="pointer-events-none absolute inset-x-0 bottom-0 px-3 pb-2 pt-10 bg-gradient-to-t from-black/70 via-black/30 to-transparent"
         :style="fs ? { paddingBottom: 'calc(0.5rem + var(--sys-inset-bottom, 0px))' } : {}">
-        <div class="flex items-center gap-2.5">
+        <div class="flex items-center gap-2.5" :class="compact ? 'gap-1.5' : 'gap-2.5'">
           <!-- 播放/暂停 -->
           <button
             class="pointer-events-auto flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/10 text-white shadow-md backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:border-white/30 hover:bg-white/25 hover:shadow-[0_4px_14px_rgba(0,0,0,0.45)] active:scale-90"
@@ -1088,15 +1131,17 @@ onBeforeUnmount(() => {
 
           <!-- 倍速：悬浮向上展开全部档位，点击直接切换（点击按钮本身仍可循环切换） -->
           <div class="pointer-events-auto relative shrink-0" @mouseenter="openRate" @mouseleave="closeRate">
-            <div v-if="rateOpen"
-              class="absolute bottom-full left-1/2 z-30 -translate-x-1/2 flex flex-col gap-0.5 rounded-xl border border-white/10 bg-[#0e1017]/95 p-1 pb-1.5 shadow-2xl backdrop-blur-sm">
-              <button v-for="r in RATES" :key="r"
-                class="b-none w-16 rounded-lg px-3 py-1 text-[11px] tabular-nums transition-colors"
-                :class="r === rate ? 'bg-black/60 text-white' : 'text-gray-300 hover:bg-white/15 hover:text-white'"
-                @click="setRate(r)">
-                {{ r }}x
-              </button>
-            </div>
+            <Transition name="pop">
+              <div v-if="rateOpen"
+                class="absolute bottom-full left-1/2 z-30 -translate-x-1/2 flex flex-col gap-0.5 rounded-xl border border-white/10 bg-[#0e1017]/95 p-1 pb-1.5 shadow-2xl backdrop-blur-sm">
+                <button v-for="r in RATES" :key="r"
+                  class="b-none w-16 rounded-lg px-3 py-1 text-[11px] tabular-nums transition-colors"
+                  :class="r === rate ? 'bg-black/60 text-white' : 'text-gray-300 hover:bg-white/15 hover:text-white'"
+                  @click="setRate(r)">
+                  {{ r }}x
+                </button>
+              </div>
+            </Transition>
             <button
               class="w-12 rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[11px] font-medium tabular-nums text-white/90 backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:border-white/25 hover:bg-white/20 hover:text-white active:scale-95"
               :title="`播放速度：当前 ${rate}x（悬浮展开选择，点击循环切换）`" @click="cycleRate">
@@ -1121,21 +1166,21 @@ onBeforeUnmount(() => {
               @input="onVolumeInput" :title="'音量 ' + Math.round((muted ? 0 : volume) * 100) + '%'" />
           </div>
 
-          <!-- 下载 -->
+          <!-- 下载（App 非全屏紧凑模式下隐藏，避免按钮溢出） -->
           <button
             class="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white/85 backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:border-white/25 hover:bg-white/20 hover:text-white hover:shadow-[0_4px_14px_rgba(0,0,0,0.4)] active:scale-90"
-            title="下载当前视频" @click="downloadVideo">
+            title="下载当前视频" @click="downloadVideo" v-show="!compact">
             <span class="i-carbon-download text-base" />
           </button>
 
-          <!-- 画中画（视频脱离页面窗口置顶小窗播放，与全屏互斥） -->
+          <!-- 画中画（视频脱离页面窗口置顶小窗播放，与全屏互斥；App 非全屏紧凑模式下隐藏） -->
           <button
             class="pointer-events-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 backdrop-blur-sm transition-all duration-200 hover:scale-105 hover:shadow-[0_4px_14px_rgba(0,0,0,0.4)] active:scale-90"
             :class="pipActive
               ? 'bg-white/20 text-white border-white/25'
               : 'bg-white/10 text-white/85 border-white/10 hover:border-white/25 hover:bg-white/20 hover:text-white'"
-            :title="pipActive ? '退出画中画' : '画中画'" @click="togglePip">
-            <span class="i-carbon-view-mode-2 text-base" />
+            :title="pipActive ? '退出画中画' : '画中画'" @click="togglePip" v-show="!compact">
+            <span class="i-carbon-popup text-base" />
           </button>
 
           <!-- 全屏 -->

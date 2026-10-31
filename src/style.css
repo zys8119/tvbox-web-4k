@@ -201,3 +201,25 @@ a {
 .fade-leave-to {
   opacity: 0;
 }
+
+/* 弹出面板（选集 / 简介）：整层淡入 + 自右轻微滑入 / 淡出 + 滑出 */
+.panel-enter-active,
+.panel-leave-active {
+  transition: opacity 0.26s ease, transform 0.26s ease;
+}
+.panel-enter-from,
+.panel-leave-to {
+  opacity: 0;
+  transform: translateX(28px);
+}
+
+/* 小浮层（倍速菜单等）：淡入 + 自底部轻微缩放进入（保留水平居中位移 -50%） */
+.pop-enter-active,
+.pop-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+.pop-enter-from,
+.pop-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 8px) scale(0.96);
+}

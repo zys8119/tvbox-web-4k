@@ -568,12 +568,16 @@ onBeforeUnmount(() => {
           </VideoControls>
 
           <!-- 选集弹层：覆盖播放器展示当前线路剧集 -->
-          <EpisodePicker v-if="showEpPicker && episodes.length" :episodes="episodes" :current-url="playId"
-            :title="currentLine?.from ?? '选集'" @select="(url: string) => { showEpPicker = false; goEp(url, flag); }"
-            @close="showEpPicker = false" />
+          <Transition name="panel">
+            <EpisodePicker v-if="showEpPicker && episodes.length" :episodes="episodes" :current-url="playId"
+              :title="currentLine?.from ?? '选集'" @select="(url: string) => { showEpPicker = false; goEp(url, flag); }"
+              @close="showEpPicker = false" />
+          </Transition>
 
           <!-- 简介弹层：覆盖播放器展示影片详情 -->
-          <VodIntro v-if="showIntro && detail" :detail="detail" @close="showIntro = false" />
+          <Transition name="panel">
+            <VodIntro v-if="showIntro && detail" :detail="detail" @close="showIntro = false" />
+          </Transition>
 
           <div v-if="loading"
             class="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 backdrop-blur-sm text-sm text-gray-300">
