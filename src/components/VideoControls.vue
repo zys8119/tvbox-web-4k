@@ -145,14 +145,14 @@ const showBars = computed(() => visible.value && !locked.value);
 const compact = computed(() => IS_NATIVE && !fs.value);
 /**
  * 顶部渐变条 paddingTop：全屏时叠加系统状态栏高度，避免顶部按钮被遮挡。
- * App 端采用「隐藏系统栏 + 固定下移一个按钮高度」双保险：
- * max(40px, --sys-inset-top) 保证至少下移一个按钮高度（约 40px），
+ * App 端采用「隐藏系统栏 + 固定下移」双保险：
+ * max(20px, --sys-inset-top) 保证至少下移 20px，
  * 即便系统栏隐藏失败且 insets 反馈滞后，顶部按钮也不会被遮挡。
  */
 const topBarStyle = computed(() => {
   if (!fs.value) return {};
   const padTop = IS_NATIVE
-    ? "calc(0.75rem + max(40px, var(--sys-inset-top, 0px)))"
+    ? "calc(0.75rem + max(20px, var(--sys-inset-top, 0px)))"
     : "calc(0.75rem + var(--sys-inset-top, 0px))";
   return { paddingTop: padTop };
 });
