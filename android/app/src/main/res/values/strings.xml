@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">TVBox 4K</string>
-    <string name="title_activity_main">TVBox 4K</string>
+    <string name="app_name">方盒子影视</string>
+    <string name="title_activity_main">方盒子影视</string>
     <string name="package_name">com.tvbox.web4k</string>
     <string name="custom_url_scheme">com.tvbox.web4k</string>
 </resources>

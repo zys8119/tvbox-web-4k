@@ -1,6 +1,6 @@
 {
 	"appId": "com.tvbox.web4k",
-	"appName": "TVBox 4K",
+	"appName": "方盒子影视",
 	"webDir": "dist",
 	"android": {
 		"allowMixedContent": true
