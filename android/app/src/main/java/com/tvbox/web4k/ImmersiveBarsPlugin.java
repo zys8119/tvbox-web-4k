@@ -35,8 +35,8 @@ public class ImmersiveBarsPlugin extends Plugin {
     private volatile boolean pendingHide = false;
     private Runnable hideRetry;
 
-    /** 延迟重试间隔（毫秒）：全屏切换过程中状态栏可能被系统/WebView 重新显示 */
-    private static final int[] RETRY_DELAYS = {150, 300, 600};
+    /** 延迟重试间隔（毫秒）：全屏切换/方向锁定时系统栏多次被系统或 WebView 重新显示 */
+    private static final int[] RETRY_DELAYS = {200, 500, 1200, 2500, 5000, 10000};
 
     private WindowInsetsControllerCompat controller() {
         Window window = getActivity().getWindow();

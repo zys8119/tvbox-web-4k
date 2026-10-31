@@ -81,10 +81,7 @@ export interface PlayResult {
   msg?: string;
 }
 
-async function getJson<T>(
-  path: string,
-  params?: Record<string, string>,
-): Promise<T> {
+async function getJson<T>(path: string, params?: Record<string, string>): Promise<T> {
   const qs = params
     ? "?" +
       new URLSearchParams(
@@ -100,7 +97,8 @@ async function getJson<T>(
 export const fetchHome = () => getJson<HomeData>("/home");
 
 /** 首页推荐 */
-export const fetchHomeVideo = () => getJson<{ list: VodItem[] }>("/home/video");
+export const fetchHomeVideo = () =>
+  getJson<{ list: VodItem[] }>("/home/video");
 
 /** 分类列表 */
 export const fetchCategory = (
@@ -323,13 +321,9 @@ export const switchTvboxSubscription = (id: string) =>
 
 /** 删除保存的订阅 */
 export const removeTvboxSubscription = (id: string) =>
-  sendJson<{ ok: boolean; activeId: string }>(
-    "/api/tvbox/config/remove",
-    "POST",
-    {
-      id,
-    },
-  );
+  sendJson<{ ok: boolean; activeId: string }>("/api/tvbox/config/remove", "POST", {
+    id,
+  });
 
 /** 重新拉取订阅 */
 export const refreshTvbox = () =>

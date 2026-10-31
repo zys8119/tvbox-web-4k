@@ -12,8 +12,8 @@ const IS_NATIVE = Capacitor.isNativePlatform();
  *
  * 特性：
  * - 按钮化控制：播放/暂停、进度拖拽、音量、倍速（1x/1.5x/1.7x/2x/2.5x/2.7x/3x/4x/5x）、全屏；
- * - 显隐策略：鼠标悬浮时显示、闲置 2.6s 后自动隐藏、鼠标离开播放器立即隐藏（仅播放时），
- *   暂停时保持显示；全屏下鼠标活动立即显示、闲置自动隐藏；
+ * - 显隐策略：鼠标悬浮时显示、闲置 2.6s 后自动隐藏、鼠标离开播放器立即隐藏（仅浏览器/播放时），
+ *   暂停时保持显示；App 端由单击画面切换显隐，状态持久不复位；
  * - 键盘快捷键：Space/K 播放暂停，←/→ 快退/快进 5s（长按持续快退/快进），↑/↓ 音量，M 静音，F 全屏（输入框内不生效）；
  * - 中心 OSD：音量、进度、倍速变化时视频中心临时显示当前数值，操作停止后自动消失；
  * - 全屏：对包含 video 的容器元素（wrap）请求全屏，控制条随容器一起全屏展示；
@@ -296,9 +296,9 @@ function toggleLock() {
 function poke() {
   visible.value = true;
   clearTimeout(hideTimer);
-  // App 全屏：控制层持久显示（触摸端无悬停语义，显示/隐藏由单击画面切换）；
-  // 其余场景（浏览器 / 非全屏）保持闲置 2.6s 自动隐藏
-  if (playing.value && !(IS_NATIVE && fs.value)) {
+  // 仅浏览器端保留悬停语义的闲置自动隐藏（2.6s）；
+  // App 端单击画面切换显隐：状态持久，显示后不复位，直到下次单击或锁定
+  if (!IS_NATIVE && playing.value) {
     hideTimer = setTimeout(() => {
       if (!seeking.value) visible.value = false;
     }, 2600);
@@ -493,7 +493,13 @@ function toggleFs() {
   } else {
     // 先隐藏系统栏，再进入全屏：规避 WebView custom view 切换瞬间系统重显状态栏
     hideSystemBars();
-    w.requestFullscreen().then(lockLandscape).catch(() => { });
+    w.requestFullscreen()
+      .then(async () => {
+        await lockLandscape();
+        // 方向锁定引起界面重排/系统栏重置，锁屏完成后再隐藏一次系统栏
+        hideSystemBars();
+      })
+      .catch(() => { });
   }
 }
 
@@ -513,8 +519,9 @@ function onFsChange() {
   const isFs = !!document.fullscreenElement;
   fs.value = isFs;
   if (isFs) {
-    lockLandscape();
-    // 全屏播放：隐藏系统菜单栏（状态栏 + 导航栏），画面铺满整个屏幕
+    // 全屏播放：锁定横屏并隐藏系统菜单栏（状态栏 + 导航栏），画面铺满整个屏幕。
+    // 锁屏触发重排可能重显系统栏，锁定完成后再次隐藏。
+    lockLandscape().then(() => hideSystemBars());
     hideSystemBars();
   } else {
     restorePortrait();
@@ -608,9 +615,10 @@ function onWrapMove() {
   poke();
 }
 
-/** 鼠标离开播放器：播放中立即隐藏控制条（暂停时保持显示，便于点击播放） */
+/** 鼠标离开播放器：播放中立即隐藏控制条（暂停时保持显示，便于点击播放）。
+ *  App 端无悬停语义（控制层由单击画面持久切换），不响应离开隐藏，避免干扰。 */
 function onWrapLeave() {
-  if (playing.value) {
+  if (!IS_NATIVE && playing.value) {
     clearTimeout(hideTimer);
     visible.value = false;
   }

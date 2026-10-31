@@ -75,3 +75,5 @@ android/.cxx/
 *.apk
 # Java 桥接层编译产物
 server/jarbridge/build/
+
+.agents
