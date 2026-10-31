@@ -56,13 +56,11 @@ function doSearch() {
       class="sticky top-0 z-30 bg-[#0a0b0f]/70 backdrop-blur-2xl border-b border-white/[0.07] shadow-[0_8px_32px_-16px_rgba(0,0,0,0.9)] pt-[env(safe-area-inset-top)]">
       <div class="page-wrap h-16 flex items-center gap-4">
         <RouterLink to="/" class="group flex items-center gap-2 shrink-0">
-          <span
-            class="relative w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 flex items-center justify-center text-sm font-bold shadow-[0_6px_20px_-6px_rgba(99,102,241,0.95)] transition-transform duration-300 group-hover:scale-105">
-            橘
-          </span>
+          <img src="/images/logo.png" alt="方盒子影视"
+            class="relative w-9 h-9 rounded-xl bg-white/95 p-0.5 object-contain shadow-[0_6px_20px_-6px_rgba(0,0,0,0.6)] transition-transform duration-300 group-hover:scale-105" />
           <span
             class="text-lg font-semibold tracking-wide bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-            橘汁影视
+            方盒子影视
           </span>
         </RouterLink>
 
@@ -157,7 +155,7 @@ function doSearch() {
 
     <footer
       class="mt-8 border-t border-white/[0.07] py-8 text-center text-xs text-gray-500 pb-[calc(env(safe-area-inset-bottom)+2rem)]">
-      <p class="tracking-wide">橘汁影视 · 仅供学习交流使用</p>
+      <p class="tracking-wide">方盒子影视 · 仅供学习交流使用</p>
     </footer>
   </div>
 </template>
