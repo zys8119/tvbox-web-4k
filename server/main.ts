@@ -774,11 +774,20 @@ class Woshinidie {
       if (pub) this.rsaPub = pub;
     } catch (e) {
       console.warn(
-        "[init] 获取动态公钥失败，沿用内置公钥:",
+        `[init] 获取动态公钥失败（${this.host}/api/v5/find/app/zone），沿用内置公钥` +
+          `（${this.rsaPub.length} 字）。若为网络错误(socket hang up/超时)说明源站不可达；` +
+          `若应用层报"密钥失败"则需更换有效的 extend 配置(host/pub/keys):`,
         (e as Error).message,
       );
     }
-    console.log("[init] host =", this.host, "| f =", this.f);
+    console.log(
+      "[init] host =",
+      this.host,
+      "| f =",
+      this.f,
+      "| rsaPub =",
+      this.rsaPub.slice(0, 40) + "...",
+    );
   }
 
   /* ---------- 设备指纹 d() ---------- */
